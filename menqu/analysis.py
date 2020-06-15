@@ -3,10 +3,12 @@ import math
 import sys
 from collections import namedtuple
 from colr import color as make_color
+import click
 
 Measurement = namedtuple("Measurement", ["data", "gene_name", "gene_type", "identifier"])
 alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
+@click.command()
 def main():
     app = get_app()
     print('Connected to Excel.')
@@ -321,8 +323,4 @@ def write_results(deltadata, deltadeltadata, sheet):
     values = [value for gene in results.values() for value in sorted(gene.values(), key=get_sort_key)]
 
     sheet.range("A1:G100").value = values
-
-
-if __name__ == '__main__':
-    main()
 

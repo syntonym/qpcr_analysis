@@ -25,6 +25,11 @@ setup(
     author="Simon Haendeler",
     author_email="simon@haend.de",
     packages=find_packages(exclude=["examples", "contrib", "docs", "tests"]),
+    include_package_data=True,
+    entry_points="""
+    [console_scripts]
+    menqu=menqu.analysis:main
+    """,
     # This are the versions I tested with, but if you know what you do you can also change these for compatibility reasons
     install_requires=["xlwings", "colr", "click"],
     extras_require={"SVG export": []},
