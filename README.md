@@ -1,4 +1,6 @@
-qpcr analysis script, used in mendjan lab my Alison Deyett
+# Menqu
+
+Mendjan Lab qPCR analysis script
 
 
 # Todo
