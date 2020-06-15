@@ -73,6 +73,7 @@ def write_to_sheet(data, sheet, color_mapping=None):
             color = inverse_color_mapping.get(m.gene_name, None)
             for _ in range(max_fields):
                 colors.append(color)
+        colors.append(color)
 
     if len(values) > 1:
         i = 0
@@ -236,25 +237,25 @@ def parse_well(well):
     if len(well) == 2:
         if well[0].isalpha():
             row = well[0]
-            column = int(well[1])-1
+            column = int(well[1])
         else:
-            column = int(well[0])-1
+            column = int(well[0])
             row = well[1]
     elif len(well) == 3:
         if well[0].isalpha():
             row = well[0]
-            column = int(well[1:3])-1
+            column = int(well[1:3])
         else:
-            column = int(well[0:2])-1
+            column = int(well[0:2])
             row = well[2]
     else:
         raise Exception(f"Couldn't understand well {well}.")
-    return column, row
+    return row.upper(), column
     row = alphabet.index(row.upper())
     return row, column
 
 def well_to_excel(row, column):
-    row = alphabet.index(row.upper())
+    row = alphabet.index(row.upper()) +1
     return row, column
 
 def excel_to_well(cell_row, cell_column):
