@@ -20,7 +20,8 @@ def main():
     analysisbook = get_analysisbook(app)
     print(f'Detected setup     {analysisbook.name}.')
     print()
-    excluded_wells = [parse_well(well.strip()) for well in input('Which data should be excluded due to funky melt curves? (Ex: 9A) ').split(",")]
+    excludes = input('Which data should be excluded due to funky melt curves? (Ex: 9A) ').split(",")
+    excluded_wells = [parse_well(well.strip()) if well.strip() else None for well in excludes]
 
     _main(app, databook, analysisbook, excluded_wells)
 
@@ -55,14 +56,14 @@ def _main(app, databook, analysisbook, excluded_wells):
     return data
 
 
-def measurement_to_list(m):
-    return [m.gene_name, m.gene_type, m.identifier, *m.data]
+def measurement_to_list(m, max_fields=0):
+    return [m.gene_name, m.gene_type, m.identifier, *m.data, *[None for x in range(max_fields - 3 - len(m.data))]]
 
 def write_to_sheet(data, sheet, color_mapping=None):
     max_fields = max([len(measurement_to_list(m)) for m in data])
-    values = [["Name", "Type", "Sample", *["R" + i for i in range(1, max_fields +1 - 3)]]]
+    values = [["Name", "Type", "Sample", *["R" + str(i) for i in range(1, max_fields +1 - 3)]]]
     for m in data:
-        values.append(measurement_to_list(m))
+        values.append(measurement_to_list(m, max_fields))
     sheet.range((1,1), (max_fields, len(values))).value = values
 
     colors = []
@@ -193,6 +194,7 @@ def read_data(databook, color_mapping, identifier_mapping, excluded_wells):
 
     well_to_gene = {}
     data_per_gene = {}
+    data_matrix = []
 
     for row, number in enumerate(range(4, 65, 4)):
      datatransfer = databook.sheets['SYBR'].range(f'C{number}:Z{number}')
@@ -203,7 +205,7 @@ def read_data(databook, color_mapping, identifier_mapping, excluded_wells):
        data = 40
       if parse_well(excel_to_well(cell.row, cell.column)) in excluded_wells:
           data = None
-      filled_data.append(data)
+      #filled_data.append(data)
 
       identifier, color = identifier_mapping.get((row, column), (None, None))
       if color is None:
@@ -219,14 +221,14 @@ def read_data(databook, color_mapping, identifier_mapping, excluded_wells):
       data_per_gene[(gene_name, gene_type)] = measurements_per_gene
       measurements_per_gene[identifier] = measurements
 
-      for gene, measurements_per_gene in data_per_gene.items():
-           gene_name, gene_type = gene
-           for identifier, measurements in measurements_per_gene.items():
-               data_matrix.append(Measurement(measurements, gene_name,  gene_type , identifier))
-      #data_matrix.append(Measurement(filled_data[0], filled_data[1], filled_data[2], gene_name, gene_type, identifier))
-      filled_data = []
-
-    data_matrix = []
+    for gene, measurements_per_gene in data_per_gene.items():
+         gene_name, gene_type = gene
+         for identifier, measurements in measurements_per_gene.items():
+             if gene_name is None and gene_type is None:
+                 continue
+             data_matrix.append(Measurement(measurements, gene_name,  gene_type , identifier))
+    #data_matrix.append(Measurement(filled_data[0], filled_data[1], filled_data[2], gene_name, gene_type, identifier))
+    filled_data = []
 
     return data_matrix
 
@@ -276,7 +278,7 @@ def normalize_housekeeping(data, housekeeping):
     r = []
     for m in data:
         if m.identifier:
-            r.append(Measurement(*[x - housekeeping[m.identifier] if x is not None else None for x in m.data ], m.gene_name, m.gene_type, m.identifier))
+            r.append(Measurement([x - housekeeping[m.identifier] if x is not None else None for x in m.data ], m.gene_name, m.gene_type, m.identifier))
     return r
 
 def calculate_pluripotent_normalisation(data):
@@ -296,7 +298,7 @@ def normalize_pluripotent(data, pluripotent):
     print(pluripotent)
     for m in data:
         if m.identifier:
-            r.append(Measurement(*[x - pluripotent[m.gene_name] if x is not None else None for x in m.data ], m.gene_name, m.gene_type, m.identifier))
+            r.append(Measurement([x - pluripotent[m.gene_name] if x is not None else None for x in m.data ], m.gene_name, m.gene_type, m.identifier))
     return r
 
 
