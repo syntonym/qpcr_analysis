@@ -264,7 +264,7 @@ def excel_to_well(cell_row, cell_column):
     return (character, number)
 
 def mean(l):
-    ll = [x for x in l if x]
+    ll = [x for x in l if x is not None]
     return sum(ll) / len(ll)
 
 def calculate_housekeeping_normalisation(data):
@@ -315,13 +315,13 @@ def write_results(deltadata, deltadeltadata, sheet):
     results = {}
     for m in deltadata:
         gene = results.get(m.gene_name, {})
-        gene[m.identifier] = [m.identifier, *[2**-x if x else None for x in m.data]]
+        gene[m.identifier] = [m.identifier, *[2**-x if x is not None else None for x in m.data]]
         results[m.gene_name] = gene
 
     for m in deltadeltadata:
         results[m.gene_name][m.identifier].append(m.gene_name)
         for x in m.data:
-            results[m.gene_name][m.identifier].append(2**-x if x else None)
+            results[m.gene_name][m.identifier].append(2**-x if x is not None else None)
 
     values = [value for gene in results.values() for value in sorted(gene.values(), key=get_sort_key)]
 
