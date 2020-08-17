@@ -168,7 +168,7 @@ def read_gene_mapping(analysisbook):
         if name is None and color is None:
             break
         cell3 = next(cells)
-        gene_type = cell3.value
+        gene_type = str(cell3.value)
         if name or gene_type:
             color_mapping[color] = (name, gene_type)
     print("Detected the following genes/colorcodes:")
@@ -312,16 +312,20 @@ def get_sort_key(row):
 def write_results(deltadata, deltadeltadata, sheet):
     values = []
 
+    max_fields = max([len(m.data)+1 for m in deltadata])
+
     results = {}
     for m in deltadata:
         gene = results.get(m.gene_name, {})
-        gene[m.identifier] = [m.identifier, *[2**-x if x else None for x in m.data]]
+        gene[m.identifier] = [m.identifier, *[2**-x if x else None for x in m.data], *[None for x in range(max_fields-1-len(m.data))]]
         results[m.gene_name] = gene
 
     for m in deltadeltadata:
         results[m.gene_name][m.identifier].append(m.gene_name)
         for x in m.data:
             results[m.gene_name][m.identifier].append(2**-x if x else None)
+        for x in range(max_fields-1-len(m.data)):
+            results[m.gene_name][m.identifier].append(None)
 
     values = [value for gene in results.values() for value in sorted(gene.values(), key=get_sort_key)]
 
