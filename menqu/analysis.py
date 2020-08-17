@@ -1,15 +1,19 @@
-import xlwings
 import math
 import sys
 from collections import namedtuple
 from colr import color as make_color
 import click
+import os
 
 Measurement = namedtuple("Measurement", ["data", "gene_name", "gene_type", "identifier"])
 alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 @click.command()
-def main():
+@click.option("--update/--no-update", default=True)
+def main(update):
+    if update:
+        _update()
+    import xlwings
     app = get_app()
     print('Connected to Excel.')
     print('We now try to find your data and your template')
@@ -24,6 +28,28 @@ def main():
     excluded_wells = [parse_well(well.strip()) if well.strip() else None for well in excludes]
 
     _main(app, databook, analysisbook, excluded_wells)
+
+def _update():
+    """Re-execute the current process.
+    
+    This must be called from the main thread, because certain platforms
+    (OS X) don't allow execv to be called in a child thread very well.
+    """
+
+    import subprocess
+    import sys
+
+    print("Checking for updates...")
+    print("Enter github credentials")
+
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-U", "git+https://github.com/syntonym/qpcr_analysis"])
+    args = [arg for arg in sys.argv[:] if arg != "--update"] + ["--no-update"]
+    print('Re-spawning %s' % ' '.join(args))
+    args.insert(0, sys.executable)
+    if sys.platform == 'win32':
+        args = ['"%s"' % arg for arg in args]
+
+    os.execv(sys.executable, args)
 
 def _main(app, databook, analysisbook, excluded_wells):
     color_mapping = read_gene_mapping(analysisbook)
@@ -331,3 +357,6 @@ def write_results(deltadata, deltadeltadata, sheet):
 
     sheet.range("A1:G100").value = values
 
+
+if __name__ == "__main__":
+    main()
