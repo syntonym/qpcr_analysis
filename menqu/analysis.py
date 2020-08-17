@@ -168,7 +168,7 @@ def read_gene_mapping(analysisbook):
         if name is None and color is None:
             break
         cell3 = next(cells)
-        gene_type = str(cell3.value)
+        gene_type = str(cell3.value) if cell3.value is not None else None
         if name or gene_type:
             color_mapping[color] = (name, gene_type)
     print("Detected the following genes/colorcodes:")
