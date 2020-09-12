@@ -40,9 +40,9 @@ def _update():
     import sys
 
     print("Checking for updates...")
-    print("Enter github credentials")
+    print("When asked, enter github credentials")
 
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-U", "git+https://github.com/syntonym/qpcr_analysis"])
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-U", "git+https://github.com/syntonym/qpcr_analysis", "--user"])
     args = [arg for arg in sys.argv[:] if arg != "--update"] + ["--no-update"]
     print('Re-spawning %s' % ' '.join(args))
     args.insert(0, sys.executable)
