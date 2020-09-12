@@ -4,6 +4,7 @@ from collections import namedtuple
 from colr import color as make_color
 import click
 import os
+import xlwings
 
 Measurement = namedtuple("Measurement", ["data", "gene_name", "gene_type", "identifier"])
 alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
