@@ -8,7 +8,8 @@ import pickle
 import pandas
 import os.path
 
-from bokeh.models import Row, Column, layout, TextInput, Div, Button
+from bokeh.models import Row, Column,  TextInput, Div, Button
+from bokeh.layouts import layout
 from bokeh.server.server import Server
 
 def bkapp(doc):
