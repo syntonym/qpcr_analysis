@@ -29,6 +29,7 @@ setup(
     entry_points="""
     [console_scripts]
     menqu=menqu.analysis:main
+    menqu-plot=menqu.plot:main
     """,
     # This are the versions I tested with, but if you know what you do you can also change these for compatibility reasons
     install_requires=["xlwings", "colr", "click"],
