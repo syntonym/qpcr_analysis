@@ -4,7 +4,6 @@ from collections import namedtuple
 from colr import color as make_color
 import click
 import os
-import xlwings
 
 Measurement = namedtuple("Measurement", ["data", "gene_name", "gene_type", "identifier"])
 alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -102,6 +101,7 @@ def write_to_sheet(data, sheet, color_mapping=None):
         print()
 
 def get_app():
+    import xlwings
     if len(xlwings.apps) != 1:
         print('Too many excel applications open, i can only handle one, please close the other ones.')
 

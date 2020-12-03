@@ -394,7 +394,7 @@ class App:
         self.root.children.append(self._main_column)
         self.root.children.remove(self.wells_container)
 
-        data = excluded_wells = self.wells_container.get_excluded_wells()
+        excluded_wells = self.wells_container.get_excluded_wells()
 
         data = _main(self._app, self._databook, self._analysisbook, excluded_wells)
 
