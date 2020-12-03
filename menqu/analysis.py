@@ -131,7 +131,7 @@ def get_analysisbook(app):
     for book in app.books:
      sheets = [sheet.name.strip() for sheet in book.sheets]
      print(sheets)
-     if "Set Up" in sheets and "Genes" in sheets:
+     if "Set Up" in sheets:
       candidates.append(book)
       analysisbook=book
       break
@@ -159,7 +159,7 @@ def read_setup(analysisbook, color_mapping):
 
     for cell, value in zip(plate_setup, flatten_list_of_lists(cell_values)):
         color = cell.color
-        identifier_mapping[(cell.row-2, cell.column-2)] = (value, color)
+        identifier_mapping[(cell.row-2, cell.column-2)] = (str(value), color)
         if color not in color_mapping.keys():
             print(f'Unknown color in excel cell {cell.row}, {cell.column}: {make_color(color, color)} with value {value}')
 
@@ -363,13 +363,21 @@ def parse_condition(v):
     return "True" if v == "+" else "False"
 
 def get_sample_data(analysisbook):
-    values = analysisbook.sheets["Identifying samples"].range("A1:Z100")
+    values = analysisbook.sheets["Identifying samples"].range("A1:Z100").value
 
     conditions = [x for x in values[0] if x is not None]
     condition_data = {condition: [] for condition in conditions}
     for line in values[1:]:
+        if line[0] == None:
+            break
         for cond, v in zip(conditions, line):
-            condition_data[cond] = v
+            if cond != "Sample":
+                if (v.strip() == '+') if type(v) == str else False:
+                    v = 'True'
+                else:
+                    v = 'False'
+
+            condition_data[cond].append(str(v))
 
     conditions = conditions[1:]
 

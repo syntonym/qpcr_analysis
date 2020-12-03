@@ -327,6 +327,7 @@ class App:
 
     @mutate_bokeh
     def load_data(self, data):
+        print(data)
         self.data = data
         gene_data = self.data["gene_data"]
         condition_data = self.data["condition_data"]
@@ -388,7 +389,7 @@ class App:
         self.root.children.remove(self._main_column)
         self.root.children.append(self.wells_container)
 
-        #self._app, self._databook, self._analysisbook = prepare()
+        self._app, self._databook, self._analysisbook = prepare()
 
     @mutate_bokeh
     def _import_step2(self):
@@ -397,9 +398,7 @@ class App:
 
         excluded_wells = self.well_excluder.get_excluded_wells()
 
-        #data = _main(self._app, self._databook, self._analysisbook, excluded_wells)
-
-        data = self.data
+        data = _main(self._app, self._databook, self._analysisbook, excluded_wells)
 
         means = []
         samples = []
@@ -411,11 +410,19 @@ class App:
                 repitions[i].append(2**-x if x is not None else None)
 
             means.append(mean)
-            samples.append(m.identifier)
+            samples.append(str(m.identifier))
             genes.append(m.gene_name)
 
         gene_data = {"mean":means, "Sample":samples, "Gene": genes}
-        samples = list(set(gene_data["Sample"]))
+
+        samples_found = set()
+        samples = []
+        for x in gene_data["Sample"]:
+            if x in samples_found:
+                continue
+            samples.append(x)
+            samples_found.add(x)
+
         colors = {}
         genes = list(set(gene_data["Gene"]))
         name = ".".join(self._databook.fullname.split(".")[:-1])
