@@ -12,7 +12,7 @@ import asyncio
 import zmq
 import zmq.asyncio
 
-from .analysis import prepare, _main, parse_well, get_sample_data, _update
+from menqu.analysis import prepare, _main, parse_well, get_sample_data, _update
 import click
 
 NAME = 'AD20A7_D10.5'
@@ -388,7 +388,7 @@ class App:
         self.root.children.remove(self._main_column)
         self.root.children.append(self.wells_container)
 
-        self._app, self._databook, self._analysisbook = prepare()
+        #self._app, self._databook, self._analysisbook = prepare()
 
     @mutate_bokeh
     def _import_step2(self):
@@ -397,7 +397,9 @@ class App:
 
         excluded_wells = self.wells_container.get_excluded_wells()
 
-        data = _main(self._app, self._databook, self._analysisbook, excluded_wells)
+        #data = _main(self._app, self._databook, self._analysisbook, excluded_wells)
+
+        data = self.data
 
         means = []
         samples = []

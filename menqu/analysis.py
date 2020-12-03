@@ -363,7 +363,7 @@ def parse_condition(v):
     return "True" if v == "+" else "False"
 
 def get_sample_data(analysisbook):
-    values = analysisbook.sheets["GraphOrdering"].range("A1:Z100")
+    values = analysisbook.sheets["Identifying samples"].range("A1:Z100")
 
     conditions = [x for x in values[0] if x is not None]
     condition_data = {condition: [] for condition in conditions}
