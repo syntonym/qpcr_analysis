@@ -18,7 +18,7 @@ import click
 NAME = 'AD20A7_D10.5'
 EXCEL_AREA = 'A1:M1000'
 
-from .helpers import get_app, get_analysisbook, map_show, plot_data, export_as_svg, show
+from menqu.helpers import get_app, get_analysisbook, map_show, plot_data, export_as_svg, show
 import numpy as np
 import pickle
 import pandas
