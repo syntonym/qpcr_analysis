@@ -28,10 +28,10 @@ setup(
     include_package_data=True,
     entry_points="""
     [console_scripts]
-    menqu=menqu.analysis:main
-    menqu-plot=menqu.plot:main
+    menqu-analysis=menqu.analysis:main
+    menqu=menqu.plot:main
     """,
     # This are the versions I tested with, but if you know what you do you can also change these for compatibility reasons
-    install_requires=["xlwings", "colr", "click"],
+    install_requires=["xlwings", "colr", "click", "pandas", "zmq"],
     extras_require={"SVG export": []},
 )

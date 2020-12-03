@@ -14,17 +14,7 @@ alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 def main(update):
     if update:
         _update()
-    import xlwings
-    app = get_app()
-    print('Connected to Excel.')
-    print('We now try to find your data and your template')
-    databook = get_databook(app)
-    print()
-    print(f"Detected data in   {databook.name}")
-    print()
-    analysisbook = get_analysisbook(app)
-    print(f'Detected setup     {analysisbook.name}.')
-    print()
+    app, databook, analysisbook = prepare()
     excludes = input('Which data should be excluded due to funky melt curves? (Ex: 9A) ').split(",")
     excluded_wells = [parse_well(well.strip()) if well.strip() else None for well in excludes]
 
@@ -76,12 +66,11 @@ def _main(app, databook, analysisbook, excluded_wells):
 
     write_to_sheet(data, analysisbook.sheets['DDCT'], color_mapping)
 
-    write_results(delta_data, deltadelta_data, analysisbook.sheets['Results2'])
+    write_results(delta_data, deltadelta_data, analysisbook.sheets['Foldchange'])
 
     print('Finished working.')
 
     return data
-
 
 def measurement_to_list(m, max_fields=0):
     return [m.gene_name, m.gene_type, m.identifier, *m.data, *[None for x in range(max_fields - 3 - len(m.data))]]
@@ -111,8 +100,6 @@ def write_to_sheet(data, sheet, color_mapping=None):
                 print('.', end='')
             i += 1 
         print()
-        
-        
 
 def get_app():
     if len(xlwings.apps) != 1:
@@ -121,7 +108,6 @@ def get_app():
     app = list(xlwings.apps)[0]
 
     return app
-
 
 def get_databook(app):
     candidates = []
@@ -157,10 +143,8 @@ def get_analysisbook(app):
         sys.exit(-1)
     return analysisbook
 
-
 def flatten_list_of_lists(l):
     return [x for ll in l for x in ll]
-
 
 def read_setup(analysisbook, color_mapping):
 
@@ -182,8 +166,8 @@ def read_setup(analysisbook, color_mapping):
     return identifier_mapping
 
 def read_gene_mapping(analysisbook):
-    gene_setup = analysisbook.sheets["Genes"]
-    gene_template = gene_setup.range("A2:C100")
+    gene_setup = analysisbook.sheets["Set Up"]
+    gene_template = gene_setup.range("A21:C100")
 
     color_mapping = {}
     cells = iter(gene_template)
@@ -216,7 +200,6 @@ def check_data_validity(data):
         print('Detected invalid data. Aborting.')
         sys.exit(-1)
                 
-
 def read_data(databook, color_mapping, identifier_mapping, excluded_wells):
 
 
@@ -329,7 +312,6 @@ def normalize_pluripotent(data, pluripotent):
             r.append(Measurement([x - pluripotent[m.gene_name] if x is not None else None for x in m.data ], m.gene_name, m.gene_type, m.identifier))
     return r
 
-
 def get_sort_key(row):
     if row[0] == 'pluri':
         return ''
@@ -341,14 +323,16 @@ def write_results(deltadata, deltadeltadata, sheet):
 
     max_fields = max([len(m.data)+1 for m in deltadata])
 
+    values = [["Name", "Type", "Sample", *["DCT [Foldchange] R" + str(i) for i in range(1, max_fields +1 - 3)], "", *["DDCT [Foldchange] R" + str(i) for i in range(1, max_fields +1 - 3)]]]
+
     results = {}
     for m in deltadata:
         gene = results.get(m.gene_name, {})
-        gene[m.identifier] = [m.identifier, *[2**-x if x is not None else None for x in m.data], *[None for x in range(max_fields-1-len(m.data))]]
+        gene[m.identifier] = [m.gene_name, m.gene_type, m.identifier, *[2**-x if x is not None else None for x in m.data], *[None for x in range(max_fields-1-len(m.data))]]
         results[m.gene_name] = gene
 
     for m in deltadeltadata:
-        results[m.gene_name][m.identifier].append(m.gene_name)
+        results[m.gene_name][m.identifier].append("")
         for x in m.data:
             results[m.gene_name][m.identifier].append(2**-x if x is not None else None)
         for x in range(max_fields-1-len(m.data)):
@@ -358,6 +342,38 @@ def write_results(deltadata, deltadeltadata, sheet):
 
     sheet.range("A1:G100").value = values
 
+def prepare():
+    import xlwings
+    app = get_app()
+    print('Connected to Excel.')
+    print('We now try to find your data and your template')
+    databook = get_databook(app)
+    print()
+    print(f"Detected data in   {databook.name}")
+    print()
+    analysisbook = get_analysisbook(app)
+    print(f'Detected setup     {analysisbook.name}.')
+    print()
+
+    return app, databook, analysisbook
+
+def parse_condition(v):
+    if v:
+        v = v.strip()
+    return "True" if v == "+" else "False"
+
+def get_sample_data(analysisbook):
+    values = analysisbook.sheets["GraphOrdering"].range("A1:Z100")
+
+    conditions = [x for x in values[0] if x is not None]
+    condition_data = {condition: [] for condition in conditions}
+    for line in values[1:]:
+        for cond, v in zip(conditions, line):
+            condition_data[cond] = v
+
+    conditions = conditions[1:]
+
+    return condition_data, conditions
 
 if __name__ == "__main__":
     main()
