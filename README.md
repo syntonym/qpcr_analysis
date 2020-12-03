@@ -2,23 +2,17 @@
 
 Mendjan Lab qPCR analysis script
 
+# Install
 
-# Todo
+Install the script
 
-When we upload the qpcr analysis script to the mendjan lab, we need to do a few things:
+* `pip3 install git+https://github.com/syntonym/qpcr_analysis --user`
 
-* rename script to [lookup in powerpoint]
-* write a README.html
-* headers for results2 table
-* colors for the results2 table
-* requirement file
-* Error checking if pluri (lowercase!) exists and was found for every gene
-* error check if water was found
-* error check if control stuff was found in generel!
+You need to enable python scripts once, if you have never done that. For python 3.9 you can do this with the following commands:
 
-When we upload the plotting script, we need to do a few things:
+* `echo PATH=$PATH:$HOME/Library/Python/3.9/bin >> ~/.bash_profile`
+* `echo export PATH >> ~/.bash_profile`
 
-* requirements file
-* readme.html
-* rename script
-* give some explenation how to do stuff
+For other python versions change the version number appropriatly.
+
+You should now be able to execute the script via `menqu`.
