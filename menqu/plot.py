@@ -137,7 +137,7 @@ class WellExcluder:
         root.children.append(self._root_widget)
 
     def get_excluded_wells(self):
-        return [parse_well(well.strip()) if well.strip() else None for well in self._tp.value]
+        return [parse_well(well.strip()) if well.strip() else None for well in self._tp.value.split(",")]
 
 
 class ColorPickers:
