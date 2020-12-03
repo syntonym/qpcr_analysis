@@ -32,6 +32,6 @@ setup(
     menqu=menqu.plot:main
     """,
     # This are the versions I tested with, but if you know what you do you can also change these for compatibility reasons
-    install_requires=["xlwings", "colr", "click", "pandas", "zmq", "bokeh", "pywebview", "selenium"],
+    install_requires=["xlwings", "colr", "click", "pandas", "zmq", "bokeh", "pywebview", "selenium", "wheel"],
     extras_require={"SVG export": []},
 )
