@@ -12,7 +12,8 @@ import asyncio
 import zmq
 import zmq.asyncio
 
-from .analysis import prepare, _main, parse_well, get_sample_data
+from .analysis import prepare, _main, parse_well, get_sample_data, _update
+import click
 
 NAME = 'AD20A7_D10.5'
 EXCEL_AREA = 'A1:M1000'
@@ -496,7 +497,7 @@ def start_server(port):
     #server.io_loop.add_callback(server.show, "/")
     server.io_loop.start()
 
-def main():
+def _main_pywebview():
     PORT = 21934
 
     webview = threading.Thread(target=start_server, args=(PORT,), daemon=True)
@@ -506,7 +507,12 @@ def main():
 
     start_py_web_view(PORT)
 
-
+@click.command()
+@click.option("--update/--no-update", default=True)
+def main(update):
+    if update:
+        _update()
+    _main_pywebview()
 
 if __name__ == "__main__":
     main()
