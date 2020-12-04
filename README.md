@@ -8,11 +8,11 @@ Install the script
 
 * `pip3 install git+https://github.com/syntonym/qpcr_analysis --user`
 
-You need to enable python scripts once, if you have never done that. For python 3.9 you can do this with the following commands:
+You also need to put `.local/bin` into the PATH, you can do this via:
 
-* `echo PATH=$PATH:$HOME/Library/Python/3.9/bin >> ~/.bash_profile`
+* `echo PATH=$PATH:$HOME/.local/bin >> ~/.bash_profile`
 * `echo export PATH >> ~/.bash_profile`
 
-For other python versions change the version number appropriatly.
+Then restart your terminal.
 
 You should now be able to execute the script via `menqu`.
