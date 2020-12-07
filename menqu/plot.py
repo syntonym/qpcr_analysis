@@ -14,6 +14,7 @@ import zmq.asyncio
 
 from menqu.analysis import prepare, _main, parse_well, get_sample_data, _update
 import click
+import sys
 
 NAME = 'AD20A7_D10.5'
 EXCEL_AREA = 'A1:M1000'
@@ -245,6 +246,86 @@ class HeatmapGraphs:
 
         return p
 
+class BarGraphs:
+
+    def __init__(self, root, gene_data, condition_data, samples, genes, conditions, color_pickers={}):
+        self._gene_data = gene_data
+        self._condition_data = condition_data
+        self._genes = genes
+        self._conditions = conditions
+        self._samples = samples
+
+        self._color_pickers = color_pickers
+
+        self._maxvalue = max(max(gene_data["R1"]), max(gene_data["R2"]), max(gene_data["R3"]))
+        self._width = 25
+        self._height = 25
+        self._linear_color_mapper = None
+
+        self._condition_height = 25
+
+        self._root = Column()
+        self._draw()
+
+        root.children.append(self._root)
+
+    def redraw(self):
+        self._root.children = []
+        self._draw()
+
+    def _draw(self):
+        self._xrange = FactorRange(factors=self._samples)
+        for gene in self._genes:
+            p = figure(frame_width=self._width*len(self._samples), frame_height = self._height*2, x_range=self._xrange)
+            mask = np.array(self._gene_data["Gene"]) == gene
+            x_values = np.array(self._gene_data["Sample"])[mask]
+            r1, r2, r3 =  [np.array(self._gene_data[replicate])[mask] for replicate in ["R1", "R2", "R3"]]
+            p.vbar(x=x_values, top=np.array(self._gene_data["mean"])[mask], bottom=0, fill_color="black", line_color="black", fill_alpha=0.5)
+            p.circle(x=x_values, y=r1, color="black")
+            p.circle(x=x_values, y=r2, color="black")
+            p.circle(x=x_values, y=r3, color="black")
+
+            stacked_data = np.stack((r1, r2, r3))
+            mean = np.nanmean(stacked_data, axis=0)
+            std = np.nanstd(stacked_data, axis=0)
+
+            #whisker = Whisker(source=ColumnDataSource({"Sample": self._samples, "mean+var": mean+std, "mean-var": mean-std}), base="Sample", upper="mean+var", lower="mean-var")
+            #p.add_layout(whisker)
+
+            p.min_border_left = 70
+
+            self._root.children.append(p)
+
+        p = self.draw_conditions(self._xrange, self._condition_data)
+        self._root.children.append(p)
+
+    def draw_conditions(self, xaxis, condition_data):
+        p = figure(x_range=xaxis, frame_height=25*len(self._conditions), frame_width=self._width*len(self._samples), toolbar_location=None, y_range=self._conditions)
+        print(self._conditions)
+        apply_theme(p, CONDITIONS_THEME)
+
+        for condition in self._conditions:
+            default_color = "black"
+            if condition in self._color_pickers:
+                cp = self._color_pickers[condition]
+                default_color = cp.color
+
+            fill_alpha = general_mapper(condition, [0, 1], ["True", "False"])
+            r = p.rect(x="Sample", y=value(condition), fill_alpha=fill_alpha, line_alpha=fill_alpha, source=condition_data, width=0.8, height=0.8, color=default_color)
+
+            if condition in self._color_pickers:
+                cp.js_link("color", r.glyph, "fill_color")
+                cp.js_link("color", r.glyph, "line_color")
+
+        p.grid.visible = False
+        p.min_border_left = 70
+
+        self._condition_plot = p
+
+        return p
+
+
+
 class App:
 
     def __init__(self):
@@ -260,36 +341,48 @@ class App:
 
         self.socket = None
 
-        button_save = Button(label="Save")
+        BUTTON_WIDTH = 100
+
+        button_save = Button(label="Save", width=BUTTON_WIDTH)
         button_save.on_click(lambda: asyncio.ensure_future(self.save_file_dialog()))
 
-        button_load = Button(label="Load")
+        button_load = Button(label="Load", width=BUTTON_WIDTH)
         button_load.on_click(lambda: asyncio.ensure_future(self.load_file_dialog()))
 
-        button_export = Button(label="Export")
+        button_export = Button(label="Export", width=BUTTON_WIDTH)
         button_export.on_click(lambda: asyncio.ensure_future(self.export_file_dialog()))
 
-        button_import = Button(label="Import from Excel")
+        button_exit = Button(label="Exit", width=BUTTON_WIDTH)
+        button_exit.on_click(lambda: asyncio.ensure_future(self.exit()))
+
+        button_import = Button(label="Import from Excel", width=200)
         button_import.on_click(lambda: asyncio.ensure_future(self._import()))
 
-        button_ordering = Button(label="Reimport Graph Ordering")
+        button_ordering = Button(label="Reimport Graph Ordering", width=200)
         button_ordering.on_click(lambda: asyncio.ensure_future(self._import_graph_ordering()))
 
         self.tools_container = Row()
         self.plot_container = Column()
         self.wells_container = Column()
+        self.bargraphs_container = Column()
         self._main_column = Column(
                 Div(text="", height=100), 
                 Row(Div(text="", width=100), self.tools_container),
                 Div(text="", height=100), 
-                Row(Div(text="", width=100), self.plot_container))
+                Row(Div(text="", width=100), self.plot_container),
+                Div(text="", height=100), 
+                Row(Div(text="", width=100), self.bargraphs_container),
+                )
+
         self.root = Column(
-                Row(button_load, button_save, button_export, button_import, button_ordering), 
+                Row(button_load, button_save, button_exit, button_export, button_import, button_ordering), 
                 self._main_column)
 
         self.colorpickers = ColorPickers(self.tools_container, conditions=conditions, colors=colors)
         self.heatmap = HeatmapGraphs(self.plot_container, gene_data, condition_data, samples, genes, conditions, color_pickers=self.colorpickers.color_pickers)
         self.well_excluder = WellExcluder(self.wells_container)
+
+        self.bargraphs = BarGraphs(self.bargraphs_container, gene_data, condition_data, samples, genes, conditions, color_pickers=self.colorpickers.color_pickers)
 
         self._socket_in_use = False
 
@@ -325,6 +418,15 @@ class App:
             if file != b"":
                 self.export_as_svg(file)
 
+    async def exit(self):
+        if self.socket and not self._socket_in_use:
+            self._socket_in_use = True
+            await self.socket.send(b"EXIT")
+            file = await self.socket.recv()
+            self._socket_in_use = False
+
+            sys.exit(0)
+
     @mutate_bokeh
     def load_data(self, data):
         print(data)
@@ -348,6 +450,14 @@ class App:
         self.heatmap._samples = samples
 
         self.heatmap.redraw()
+
+        self.bargraphs._gene_data = gene_data
+        self.bargraphs._condition_data = condition_data
+        self.bargraphs._genes = genes
+        self.bargraphs._conditions = conditions
+        self.bargraphs._samples = samples
+
+        self.bargraphs.redraw()
 
     def save_to_menqu(self, filename):
         self._get_color_data()
@@ -484,6 +594,10 @@ def start_zmq_window_server(window, port):
             else:
                 filename = ""
             socket.send(filename.encode("utf-8"))
+        elif msg == b"EXIT":
+            socket.send(b"BYE")
+            window.destroy()
+            sys.exit(0)
 
 
 def start_server(port):
