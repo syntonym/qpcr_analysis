@@ -35,7 +35,7 @@ from bokeh.models import Row, Column,  TextInput, Div, Button, ColorPicker, Chec
 from bokeh.layouts import layout, grid
 from bokeh.server.server import Server
 from bokeh.plotting import figure
-from bokeh.models import ColumnDataSource, Whisker, FactorRange
+from bokeh.models import ColumnDataSource, Whisker, FactorRange, CDSView, BooleanFilter
 
 def mutate_bokeh(f):
     def wrapped(self, *args, **kwargs):
@@ -180,7 +180,7 @@ class ColorPickers:
 class HeatmapGraphs:
 
     def __init__(self, root, gene_data, condition_data, samples, genes, conditions, color_pickers={}):
-        self._gene_data = ColumnDataSource(gene_data)
+        self._gene_data = gene_data
         self._condition_data = condition_data
         self._genes = genes
         self._conditions = conditions
@@ -188,7 +188,6 @@ class HeatmapGraphs:
 
         self._color_pickers = color_pickers
 
-        self._maxvalue = max(max(gene_data["R1"]), max(gene_data["R2"]), max(gene_data["R3"]))
         self._width = 25
         self._height = 25
         self._linear_color_mapper = None
@@ -205,7 +204,21 @@ class HeatmapGraphs:
         self._root.children = []
         self._draw_everything()
 
+    def _calculate_maxvalues(self):
+        maxvalues = {}
+        for gene in self._genes:
+            mask = np.array(self._gene_data["Gene"]) == gene
+            data = np.array(self._gene_data["mean"])[mask]
+            if len(data) > 0:
+                m = np.max(data)
+            else:
+                m = 0
+            maxvalues[gene] = m
+        return maxvalues
+
     def _draw_everything(self):
+
+        self._maxvalues = self._calculate_maxvalues()
 
         self._xrange = FactorRange(factors=self._samples)
 
@@ -216,25 +229,33 @@ class HeatmapGraphs:
         self._root.children.append(p_cond)
 
     def draw_heatmap(self, xaxis, source, genes):
+        cds = ColumnDataSource(source)
+
+        TOOLTIPS = [
+                ("Sample", "@Sample"),
+                ("Gene", "@Gene"),
+                ("Foldchange", "@mean"),
+                ]
         p = figure(x_range=xaxis,
                 y_range=FactorRange(factors=genes),
                 frame_width=self._width*len(self._samples),
-                frame_height=self._height*len(self._genes))
+                frame_height=self._height*len(self._genes),
+                tooltips=TOOLTIPS)
 
         self._heatmap_plot = p
 
-        color = linear_cmap('mean', Viridis256, low=0, high=self._maxvalue)
-        self._linear_color_mapper = color["transform"]
         p.xaxis.visible = False
         p.min_border_left = 70
-
-        p.rect(x='Sample', y='Gene', width=1, height=1, color=color, source=source)
+        for gene in genes:
+            view = CDSView(source=cds, filters=[BooleanFilter([x == gene for x in source["Gene"]])])
+            color = linear_cmap('mean', Viridis256, low=0, high=self._maxvalues.get(gene, 1))
+            self._linear_color_mapper = color["transform"]
+            p.rect(x='Sample', y='Gene', width=1, height=1, color=color, source=cds, view=view)
 
         return p
 
     def draw_conditions(self, xaxis, condition_data):
         p = figure(x_range=xaxis, frame_height=25*len(self._conditions), frame_width=self._width*len(self._samples), toolbar_location=None, y_range=self._conditions)
-        print(self._conditions)
         apply_theme(p, CONDITIONS_THEME)
 
         for condition in self._conditions:
@@ -268,6 +289,7 @@ class BarGraphs:
 
         self._color_pickers = color_pickers
 
+
         self._maxvalue = max(max(gene_data["R1"]), max(gene_data["R2"]), max(gene_data["R3"]))
         self._width = 25
         self._height = 25
@@ -297,9 +319,7 @@ class BarGraphs:
             p.circle(x=x_values, y=r2, color="black")
             p.circle(x=x_values, y=r3, color="black")
 
-            print(r1.dtype)
             stacked_data = np.stack((r1, r2, r3))
-            print(stacked_data)
             mean = np.nanmean(stacked_data, axis=0)
             std = np.nanstd(stacked_data, axis=0)
 
@@ -315,7 +335,6 @@ class BarGraphs:
 
     def draw_conditions(self, xaxis, condition_data):
         p = figure(x_range=xaxis, frame_height=25*len(self._conditions), frame_width=self._width*len(self._samples), toolbar_location=None, y_range=self._conditions)
-        print(self._conditions)
         apply_theme(p, CONDITIONS_THEME)
 
         for condition in self._conditions:
