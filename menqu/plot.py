@@ -177,7 +177,34 @@ class ColorPickers:
             current_row.children.append(cp)
         self._root_widget.children.append(current_row)
 
-class HeatmapGraphs:
+class WithConditions:
+
+    def draw_conditions(self, xaxis, condition_data):
+        p = figure(x_range=xaxis, frame_height=25*len(self._conditions), frame_width=self._width*len(self._samples), toolbar_location=None, y_range=self._conditions)
+        apply_theme(p, CONDITIONS_THEME)
+
+        for condition in self._conditions:
+            default_color = "black"
+            if condition in self._color_pickers:
+                cp = self._color_pickers[condition]
+                default_color = cp.color
+
+            fill_alpha = general_mapper(condition, [0, 1], ["False", "True"])
+            r = p.rect(x="Sample", y=value(condition), fill_alpha=fill_alpha, line_alpha=fill_alpha, source=condition_data, width=0.8, height=0.8, color=default_color)
+
+            if condition in self._color_pickers:
+                cp.js_link("color", r.glyph, "fill_color")
+                cp.js_link("color", r.glyph, "line_color")
+
+        p.grid.visible = False
+        p.min_border_left = 70
+        p.xaxis.major_label_orientation = "vertical"
+
+        self._condition_plot = p
+
+        return p
+
+class HeatmapGraphs(WithConditions):
 
     def __init__(self, root, gene_data, condition_data, samples, genes, conditions, color_pickers={}):
         self._gene_data = gene_data
@@ -254,31 +281,7 @@ class HeatmapGraphs:
 
         return p
 
-    def draw_conditions(self, xaxis, condition_data):
-        p = figure(x_range=xaxis, frame_height=25*len(self._conditions), frame_width=self._width*len(self._samples), toolbar_location=None, y_range=self._conditions)
-        apply_theme(p, CONDITIONS_THEME)
-
-        for condition in self._conditions:
-            default_color = "black"
-            if condition in self._color_pickers:
-                cp = self._color_pickers[condition]
-                default_color = cp.color
-
-            fill_alpha = general_mapper(condition, [0, 1], ["True", "False"])
-            r = p.rect(x="Sample", y=value(condition), fill_alpha=fill_alpha, line_alpha=fill_alpha, source=condition_data, width=0.8, height=0.8, color=default_color)
-
-            if condition in self._color_pickers:
-                cp.js_link("color", r.glyph, "fill_color")
-                cp.js_link("color", r.glyph, "line_color")
-
-        p.grid.visible = False
-        p.min_border_left = 70
-
-        self._condition_plot = p
-
-        return p
-
-class BarGraphs:
+class BarGraphs(WithConditions):
 
     def __init__(self, root, gene_data, condition_data, samples, genes, conditions, color_pickers={}):
         self._gene_data = gene_data
@@ -332,32 +335,6 @@ class BarGraphs:
 
         p = self.draw_conditions(self._xrange, self._condition_data)
         self._root.children.append(p)
-
-    def draw_conditions(self, xaxis, condition_data):
-        p = figure(x_range=xaxis, frame_height=25*len(self._conditions), frame_width=self._width*len(self._samples), toolbar_location=None, y_range=self._conditions)
-        apply_theme(p, CONDITIONS_THEME)
-
-        for condition in self._conditions:
-            default_color = "black"
-            if condition in self._color_pickers:
-                cp = self._color_pickers[condition]
-                default_color = cp.color
-
-            fill_alpha = general_mapper(condition, [0, 1], ["True", "False"])
-            r = p.rect(x="Sample", y=value(condition), fill_alpha=fill_alpha, line_alpha=fill_alpha, source=condition_data, width=0.8, height=0.8, color=default_color)
-
-            if condition in self._color_pickers:
-                cp.js_link("color", r.glyph, "fill_color")
-                cp.js_link("color", r.glyph, "line_color")
-
-        p.grid.visible = False
-        p.min_border_left = 70
-
-        self._condition_plot = p
-
-        return p
-
-
 
 class App:
 
@@ -494,8 +471,9 @@ class App:
         condition_data = self.data["condition_data"]
         conditions = self.data["conditions"]
         genes = self.data["genes"]
-        samples = self.data["samples"]
-        colors = self.data["colors"]
+        samples = self.data["condition_data"]["Sample"]
+        colors = self._load_colors()
+        colors.update(self.data["colors"])
 
         self.colorpickers._conditions = conditions
         self.colorpickers.colors = colors
