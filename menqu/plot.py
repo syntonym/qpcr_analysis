@@ -525,7 +525,7 @@ class App:
             samples.append(str(m.identifier))
             genes.append(m.gene_name)
 
-        gene_data = {"mean":means, "Sample":samples, "Gene": genes, **{"R"+str(i) : d for i, d in enumerate(repitions)}}
+        gene_data = {"mean":means, "Sample":samples, "Gene": genes, **{"R"+str(i+1) : d for i, d in enumerate(repitions)}}
 
         samples_found = set()
         samples = []
