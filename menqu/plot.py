@@ -344,12 +344,13 @@ class App:
 
     def __init__(self):
         self.data = get_fake_data()
+        colors = self._load_colors()
         gene_data = self.data["gene_data"]
         condition_data = self.data["condition_data"]
         conditions = self.data["conditions"]
         genes = self.data["genes"]
         samples = self.data["samples"]
-        colors = self.data["colors"]
+        colors.update(self.data["colors"])
         
         self._importer_step = 0
 
