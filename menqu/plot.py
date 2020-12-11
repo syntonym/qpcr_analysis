@@ -9,15 +9,20 @@ import json
 import webview
 import threading
 import asyncio
+import pathlib
 import zmq
 import zmq.asyncio
 
 from menqu.analysis import prepare, _main, parse_well, get_sample_data, _update
 import click
 import sys
+import os.path
+import appdirs
 
 NAME = 'AD20A7_D10.5'
 EXCEL_AREA = 'A1:M1000'
+CACHE_DIR = appdirs.user_cache_dir("menqu")
+CACHE_FILE = os.path.join(CACHE_DIR, "cache")
 
 from menqu.helpers import get_app, get_analysisbook, map_show, plot_data, export_as_svg, show
 import numpy as np
@@ -143,9 +148,10 @@ class WellExcluder:
 
 class ColorPickers:
 
-    def __init__(self, root, columns=8, conditions=tuple(), colors={}):
+    def __init__(self, root, columns=8, conditions=tuple(), colors={}, app=None):
+        self.app = app
         self._conditions = conditions.copy()
-        self._default_colors = colors
+        self.colors = colors
         self._root_widget = Column()
         self._columns = columns
         self.color_pickers = {}
@@ -153,12 +159,17 @@ class ColorPickers:
 
         self._redraw_conditions()
 
+    def _update_color(self, condition, attr, old, new):
+        self.colors[condition] = new
+        self.app.save_colors()
+
     def _redraw_conditions(self):
         self._root_widget.children = []
         current_row = Row()
         cond_idx = 0
         for cond in self._conditions:
-            cp = ColorPicker(color=self._default_colors.get(cond, "blue"), title=cond, width=60)
+            cp = ColorPicker(color=self.colors.get(cond, "blue"), title=cond, width=60)
+            cp.on_change("color", lambda attr, old, new: self._update_color(cond, attr, old, new))
             self.color_pickers[cond] = cp
             if cond_idx == self._columns:
                 self._root_widget.children.append(current_row)
@@ -276,16 +287,19 @@ class BarGraphs:
     def _draw(self):
         self._xrange = FactorRange(factors=self._samples)
         for gene in self._genes:
-            p = figure(frame_width=self._width*len(self._samples), frame_height = self._height*2, x_range=self._xrange)
+            p = figure(frame_width=self._width*len(self._samples), frame_height = self._height*2, x_range=self._xrange, title=gene)
+            p.xaxis.visible = False
             mask = np.array(self._gene_data["Gene"]) == gene
             x_values = np.array(self._gene_data["Sample"])[mask]
-            r1, r2, r3 =  [np.array(self._gene_data[replicate])[mask] for replicate in ["R1", "R2", "R3"]]
-            p.vbar(x=x_values, top=np.array(self._gene_data["mean"])[mask], bottom=0, fill_color="black", line_color="black", fill_alpha=0.5)
+            r1, r2, r3 =  [np.array(self._gene_data[replicate], dtype=np.float)[mask] for replicate in ["R1", "R2", "R3"]]
+            p.vbar(x=x_values, top=np.array(self._gene_data["mean"])[mask], bottom=0, fill_color="black", line_color="black", fill_alpha=0.5, width=0.8)
             p.circle(x=x_values, y=r1, color="black")
             p.circle(x=x_values, y=r2, color="black")
             p.circle(x=x_values, y=r3, color="black")
 
+            print(r1.dtype)
             stacked_data = np.stack((r1, r2, r3))
+            print(stacked_data)
             mean = np.nanmean(stacked_data, axis=0)
             std = np.nanstd(stacked_data, axis=0)
 
@@ -378,7 +392,7 @@ class App:
                 Row(button_load, button_save, button_exit, button_export, button_import, button_ordering), 
                 self._main_column)
 
-        self.colorpickers = ColorPickers(self.tools_container, conditions=conditions, colors=colors)
+        self.colorpickers = ColorPickers(self.tools_container, conditions=conditions, colors=colors, app=self)
         self.heatmap = HeatmapGraphs(self.plot_container, gene_data, condition_data, samples, genes, conditions, color_pickers=self.colorpickers.color_pickers)
         self.well_excluder = WellExcluder(self.wells_container)
 
@@ -427,6 +441,29 @@ class App:
 
             sys.exit(0)
 
+    def save_colors(self):
+        pathlib.Path(CACHE_DIR).mkdir(parents=True, exist_ok=True)
+        colors = self._load_colors()
+        colors.update(self.colorpickers.colors)
+        self._save_colors(colors)
+
+    def load_colors(self):
+        colors = self._load_colors()
+        self.colorpickers.colors.update(colors)
+
+    def _save_colors(self, colors):
+        with open(CACHE_FILE, mode="wb") as f:
+            pickle.dump(colors, f)
+
+    def _load_colors(self):
+        colors = {}
+        try:
+            with open(CACHE_FILE, mode="rb") as f:
+                colors = pickle.load(f)
+        except Exception:
+            pass
+        return colors
+
     def load_data(self, data):
         self.data = data
         self.load_data_to_plots()
@@ -441,7 +478,7 @@ class App:
         colors = self.data["colors"]
 
         self.colorpickers._conditions = conditions
-        self.colorpickers._default_colors = colors
+        self.colorpickers.colors = colors
         self.colorpickers._redraw_conditions()
         self.heatmap._color_pickers = self.colorpickers.color_pickers
 
