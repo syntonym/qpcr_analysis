@@ -365,7 +365,7 @@ def parse_condition(v):
 def get_sample_data(analysisbook):
     values = analysisbook.sheets["Identifying samples"].range("A1:Z100").value
 
-    conditions = [x for x in values[0] if x is not None]
+    conditions = [str(x) for x in values[0] if x is not None]
     condition_data = {condition: [] for condition in conditions}
     for line in values[1:]:
         if line[0] == None:
