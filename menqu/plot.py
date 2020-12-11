@@ -329,7 +329,7 @@ class BarGraphs:
 class App:
 
     def __init__(self):
-        self.data = get_fake_data2()
+        self.data = get_fake_data()
         gene_data = self.data["gene_data"]
         condition_data = self.data["condition_data"]
         conditions = self.data["conditions"]
@@ -427,10 +427,12 @@ class App:
 
             sys.exit(0)
 
-    @mutate_bokeh
     def load_data(self, data):
-        print(data)
         self.data = data
+        self.load_data_to_plots()
+
+    @mutate_bokeh
+    def load_data_to_plots(self):
         gene_data = self.data["gene_data"]
         condition_data = self.data["condition_data"]
         conditions = self.data["conditions"]
@@ -523,7 +525,7 @@ class App:
             samples.append(str(m.identifier))
             genes.append(m.gene_name)
 
-        gene_data = {"mean":means, "Sample":samples, "Gene": genes}
+        gene_data = {"mean":means, "Sample":samples, "Gene": genes, **{"R"+i : d for i, d in enumerate(repitions)}}
 
         samples_found = set()
         samples = []
