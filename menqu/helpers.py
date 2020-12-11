@@ -9,8 +9,9 @@ import pandas
 import numpy as np
 import numpy as np
 import pandas as pd
-from bokeh.models import LabelSet, ColumnDataSource
+from bokeh.models import LabelSet, ColumnDataSource, CustomJSTransform
 from bokeh.palettes import Category10_10
+from bokeh.transform import transform
 from bokeh.io import export_svgs
 from bokeh.io import export_png
 
@@ -143,4 +144,28 @@ def plot_data(data, conditions, xaxis=None, title=None, colors={}, text_conditio
     return (p, pp)
 
 
+def apply_theme(p, theme):
+    if "Figure" in theme:
+        p.apply_theme(theme["Figure"])
+    if "Axis" in theme:
+        for axis in p.axis:
+            axis.apply_theme(theme["Axis"])
+    if "Grid" in theme:
+        for grid in p.grid:
+            grid.apply_theme(theme["Grid"])
+
+
+def general_mapper(column, mapped_to, to_map):
+    m = dict(zip(to_map, mapped_to))
+    v_func = """
+    const first = xs[0]
+    const norm = new Float64Array(xs.length)
+    for (let i = 0; i < xs.length; i++) {
+        norm[i] = m[xs[i]];
+    }
+    return norm
+    """
+    t = CustomJSTransform(args={"m": m}, v_func=v_func)
+
+    return transform(column, t)
 
