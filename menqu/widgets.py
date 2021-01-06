@@ -9,6 +9,8 @@ from menqu.themes import CONDITIONS_THEME
 
 import numpy as np
 
+MIN_BORDER_LEFT = 100
+
 class WithConditions:
 
     def draw_conditions(self, xaxis, condition_data):
@@ -29,7 +31,7 @@ class WithConditions:
                 cp.js_link("color", r.glyph, "line_color")
 
         p.grid.visible = False
-        p.min_border_left = 70
+        p.min_border_left = MIN_BORDER_LEFT
         p.xaxis.major_label_orientation = "vertical"
 
         self._condition_plot = p
@@ -84,7 +86,7 @@ class BarGraphs(WithConditions):
             #whisker = Whisker(source=ColumnDataSource({"Sample": self._samples, "mean+var": mean+std, "mean-var": mean-std}), base="Sample", upper="mean+var", lower="mean-var")
             #p.add_layout(whisker)
 
-            p.min_border_left = 70
+            p.min_border_left = MIN_BORDER_LEFT
 
             self._root.children.append(p)
 
@@ -159,7 +161,7 @@ class HeatmapGraphs(WithConditions):
         self._heatmap_plot = p
 
         p.xaxis.visible = False
-        p.min_border_left = 70
+        p.min_border_left = MIN_BORDER_LEFT
         for gene in genes:
             view = CDSView(source=cds, filters=[BooleanFilter([x == gene for x in source["Gene"]])])
             color = linear_cmap('mean', Viridis256, low=0, high=self._maxvalues.get(gene, 1))
