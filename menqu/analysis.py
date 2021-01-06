@@ -60,6 +60,7 @@ def _main(app, databook, analysisbook, excluded_wells):
 
 
     name = pjoin(tempfile._get_default_tempdir(), "mendjan.pickle")
+    print(name)
     save_as_pickle({"color_mapping": color_mapping, "identifier_mapping": identifier_mapping, "data": data}, name)
 
     write_to_sheet(data, analysisbook.sheets['Excluded'], color_mapping)
