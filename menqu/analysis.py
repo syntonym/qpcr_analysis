@@ -4,6 +4,11 @@ from collections import namedtuple
 from colr import color as make_color
 import click
 import os
+import tempfile
+import pickle
+
+from os.path import join as pjoin
+
 
 Measurement = namedtuple("Measurement", ["data", "gene_name", "gene_type", "identifier"])
 alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -41,12 +46,21 @@ def _update():
 
     os.execv(sys.executable, args)
 
+def save_as_pickle(obj, name):
+    with open(name, mode="wb") as f:
+        pickle.dump(obj)
+
 def _main(app, databook, analysisbook, excluded_wells):
     color_mapping = read_gene_mapping(analysisbook)
     identifier_mapping = read_setup(analysisbook, color_mapping) 
     data = read_data(databook, color_mapping, identifier_mapping, excluded_wells)
+
     check_data_validity(data)
     data = sorted(data, key=lambda m: (str(m.gene_type) if m.gene_type else '', str(m.gene_name) if m.gene_name else '', str(m.identifier).zfill(4) if m.identifier else ''))
+
+
+    name = pjoin(tempfile._get_default_tempdir(), "mendjan.pickle")
+    save_as_pickle({"color_mapping": color_mapping, "identifier_mapping": identifier_mapping, "data": data}, name)
 
     write_to_sheet(data, analysisbook.sheets['Excluded'], color_mapping)
 
