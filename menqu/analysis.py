@@ -58,6 +58,7 @@ def _main(app, databook, analysisbook, excluded_wells):
     check_data_validity(data)
     data = sorted(data, key=lambda m: (str(m.gene_type) if m.gene_type else '', str(m.gene_name) if m.gene_name else '', str(m.identifier).zfill(4) if m.identifier else ''))
 
+    data = [m for m in data if any(m.data)]
 
     name = pjoin(tempfile._get_default_tempdir(), "mendjan.pickle")
     print(name)
