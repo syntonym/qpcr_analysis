@@ -48,7 +48,7 @@ def _update():
 
 def save_as_pickle(obj, name):
     with open(name, mode="wb") as f:
-        pickle.dump(obj)
+        pickle.dump(obj, f)
 
 def _main(app, databook, analysisbook, excluded_wells):
     color_mapping = read_gene_mapping(analysisbook)
