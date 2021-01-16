@@ -2,7 +2,9 @@ from bokeh.plotting import figure
 from bokeh.palettes import Viridis256
 from bokeh.core.properties import value
 from bokeh.transform import linear_cmap
-from bokeh.models import Column, FactorRange, ColumnDataSource, BooleanFilter, CDSView, Row, ColorPicker
+from bokeh.models import Column, FactorRange, ColumnDataSource, BooleanFilter, CDSView, Row, ColorPicker, DataTable, TableColumn
+from bokeh.models.widgets.tables import HTMLTemplateFormatter
+from bokeh.models.callbacks import CustomJS
 
 from menqu.helpers import apply_theme, general_mapper
 from menqu.themes import CONDITIONS_THEME
@@ -200,3 +202,71 @@ class ColorPickers:
                 current_row = Row()
             current_row.children.append(cp)
         self._root_widget.children.append(current_row)
+
+
+class Table:
+
+    def __init__(self, root, gene_data, condition_data, samples, genes, conditions, color_pickers={}):
+        self._gene_data = gene_data
+        self._condition_data = condition_data
+        self._genes = genes
+        self._conditions = conditions
+        self._samples = samples
+
+        self._color_pickers = color_pickers
+
+        self._maxvalue = max(max(gene_data["R1"]), max(gene_data["R2"]), max(gene_data["R3"]))
+        self._width = 25
+        self._height = 25
+        self._linear_color_mapper = None
+
+        self._condition_height = 25
+
+        self._root = Column()
+        self._draw()
+
+        root.children.append(self._root)
+
+    def redraw(self):
+        self._root.children = []
+        self._draw()
+
+    def _draw(self):
+        d = self._gene_data
+
+        for condition in self._conditions:
+            d[condition] = [self._condition_data[condition][self._condition_data["Sample"].index(sample)] for sample in d["Sample"]]
+
+        template_update_1 = '<% if (value === "True") {print(\'<div style="height: 20px; width: 20px; background-color:'
+        template_update_2 = ';"></div>\')} %>'
+        def make_template(color):
+            return template_update_1 + str(color) + template_update_2
+
+        template_update_1_esc = template_update_1.replace("'", "\\'")
+        template_update_2_esc = template_update_2.replace("'", "\\'")
+
+        formatters = [HTMLTemplateFormatter(template=make_template(color=self._color_pickers[cond].color)) for cond in self._conditions]
+
+
+
+        condition_columns = [TableColumn(field=cond, title=cond, formatter=form, width=10) for cond, form in zip(self._conditions, formatters)]
+        columns = [
+                TableColumn(field="Sample", title="Sample", width=200),
+                TableColumn(field="Gene", title="Gene", width=10),
+                TableColumn(field="R1", title="R1"),
+                TableColumn(field="R2", title="R2"),
+                TableColumn(field="R3", title="R3"),
+                *condition_columns
+                ]
+
+        dt = DataTable(source=ColumnDataSource(d), columns=columns, width_policy="fit")
+
+        code = f"form.template = '{template_update_1_esc}' + cp.color + '{template_update_2_esc}'; dt.change.emit();"
+
+        for cp, formatter, col in zip(self._color_pickers.values(), formatters, condition_columns):
+            cp.js_on_change("color", CustomJS(args={"cp": cp, "col":col, "form": formatter, "dt": dt}, code=code))
+
+        self._root.children.append(dt)
+
+        dt.source.patch({})
+

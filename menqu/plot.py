@@ -17,7 +17,7 @@ from menqu.helpers import apply_theme
 from menqu.themes import CONDITIONS_THEME
 
 from menqu.analysis import prepare, _main, parse_well, get_sample_data, _update
-from menqu.widgets import BarGraphs, HeatmapGraphs, ColorPickers
+from menqu.widgets import BarGraphs, HeatmapGraphs, ColorPickers, Table
 import click
 import sys
 import os.path
@@ -187,6 +187,8 @@ class App:
         self.well_excluder = WellExcluder(self.wells_container)
 
         self.bargraphs = BarGraphs(self.bargraphs_container, gene_data, condition_data, samples, genes, conditions, color_pickers=self.colorpickers.color_pickers)
+
+        self.table = Table(self.table_container, gene_data, condition_data, samples, genes, conditions, color_pickers=self.colorpickers.color_pickers)
 
         self._socket_in_use = False
 
@@ -402,7 +404,7 @@ class App:
 def start_py_web_view(port):
     window = webview.create_window('menqu', 'http://localhost:5006/')
 
-    webview.start(func=start_zmq_window_server, args=(window, port))
+    webview.start(func=start_zmq_window_server, args=(window, port), debug=True)
 
 def start_zmq_window_server(window, port):
     context = zmq.Context()
