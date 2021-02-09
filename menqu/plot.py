@@ -1,4 +1,5 @@
 import multiprocessing
+import time
 from bokeh.transform import linear_cmap, factor_cmap, transform
 from bokeh.palettes import Viridis256
 from bokeh.core.properties import value
@@ -13,11 +14,13 @@ import pathlib
 import zmq
 import zmq.asyncio
 
+import menqu
 from menqu.helpers import apply_theme
 from menqu.themes import CONDITIONS_THEME
 
 from menqu.analysis import prepare, _main, parse_well, get_sample_data, _update
 from menqu.widgets import BarGraphs, HeatmapGraphs, ColorPickers, Table
+from menqu.updater import update, needs_update
 import click
 import sys
 import os.path
@@ -140,25 +143,38 @@ class App:
 
         self.socket = None
 
+        _buttons = []
         BUTTON_WIDTH = 100
 
         button_save = Button(label="Save", width=BUTTON_WIDTH)
         button_save.on_click(lambda: asyncio.ensure_future(self.save_file_dialog()))
+        _buttons.append(button_save)
 
         button_load = Button(label="Load", width=BUTTON_WIDTH)
         button_load.on_click(lambda: asyncio.ensure_future(self.load_file_dialog()))
+        _buttons.append(button_load)
 
         button_export = Button(label="Export", width=BUTTON_WIDTH)
         button_export.on_click(lambda: asyncio.ensure_future(self.export_file_dialog()))
+        _buttons.append(button_export)
 
         button_exit = Button(label="Exit", width=BUTTON_WIDTH)
         button_exit.on_click(lambda: asyncio.ensure_future(self.exit()))
+        _buttons.append(button_exit)
 
         button_import = Button(label="Import from Excel", width=200)
         button_import.on_click(lambda: asyncio.ensure_future(self._import()))
+        _buttons.append(button_import)
 
         button_ordering = Button(label="Reimport Graph Ordering", width=200)
         button_ordering.on_click(lambda: asyncio.ensure_future(self._import_graph_ordering()))
+        _buttons.append(button_ordering)
+
+        button_update = Button(label="Update", width=200)
+        button_ordering.on_click(lambda: asyncio.ensure_future(self.update()))
+        update_needed, self._update_url = needs_update(menqu.__version__)
+        if update_needed:
+            _buttons.append(button_update)
 
         self.tools_container = Row()
         self.plot_container = Column()
@@ -179,7 +195,7 @@ class App:
                 )
 
         self.root = Column(
-                Row(button_load, button_save, button_exit, button_export, button_import, button_ordering), 
+                Row(*_buttons), 
                 self._main_column)
 
         self.colorpickers = ColorPickers(self.tools_container, conditions=conditions, colors=colors, app=self)
@@ -240,6 +256,10 @@ class App:
             self._socket_in_use = False
 
             sys.exit(0)
+
+    async def update(self):
+        if self._update_url != None:
+            update(self._update_url)
 
     def save_colors(self):
         pathlib.Path(CACHE_DIR).mkdir(parents=True, exist_ok=True)
@@ -468,6 +488,8 @@ def _main_pywebview():
     webview.start()
 
     #webview.join()
+
+    time.sleep(0.3)
 
     start_py_web_view(PORT)
 

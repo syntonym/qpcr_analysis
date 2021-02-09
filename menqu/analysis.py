@@ -8,6 +8,8 @@ import tempfile
 import pickle
 
 from os.path import join as pjoin
+from menqu.updater import needs_update, update
+import menqu
 
 
 Measurement = namedtuple("Measurement", ["data", "gene_name", "gene_type", "identifier"])
@@ -25,26 +27,9 @@ def main(update):
     _main(app, databook, analysisbook, excluded_wells)
 
 def _update():
-    """Re-execute the current process.
-    
-    This must be called from the main thread, because certain platforms
-    (OS X) don't allow execv to be called in a child thread very well.
-    """
-
-    import subprocess
-    import sys
-
-    print("Checking for updates...")
-    print("When asked, enter github credentials")
-
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-U", "git+https://github.com/syntonym/qpcr_analysis", "--user"])
-    args = [arg for arg in sys.argv[:] if arg != "--update"] + ["--no-update"]
-    print('Re-spawning %s' % ' '.join(args))
-    args.insert(0, sys.executable)
-    if sys.platform == 'win32':
-        args = ['"%s"' % arg for arg in args]
-
-    os.execv(sys.executable, args)
+    update_needed, url = needs_update(menqu.__version__)
+    if update_needed:
+        update(url)
 
 def save_as_pickle(obj, name):
     with open(name, mode="wb") as f:
