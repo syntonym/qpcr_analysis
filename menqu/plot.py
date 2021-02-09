@@ -25,6 +25,7 @@ import click
 import sys
 import os.path
 import appdirs
+import logging
 
 NAME = 'AD20A7_D10.5'
 EXCEL_AREA = 'A1:M1000'
@@ -496,8 +497,11 @@ def _main_pywebview():
 @click.command()
 @click.option("--update/--no-update", default=True)
 def main(update):
-    if update:
-        _update()
+    try:
+        if update:
+            _update()
+    except:
+        logging.exception()
     _main_pywebview()
 
 if __name__ == "__main__":
