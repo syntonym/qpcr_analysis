@@ -14,3 +14,6 @@ Install the script
 Then restart your terminal.
 
 You should now be able to execute the script via `menqu`.
+
+
+For SVG export you also need to install [geckodriver](https://github.com/mozilla/geckodriver)
