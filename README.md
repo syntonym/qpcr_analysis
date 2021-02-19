@@ -16,4 +16,6 @@ Then restart your terminal.
 You should now be able to execute the script via `menqu`.
 
 
-For SVG export you also need to install [geckodriver](https://github.com/mozilla/geckodriver)
+For SVG export you also need to install [geckodriver](https://github.com/mozilla/geckodriver) and make sure firefox is available on your command line. One easy way to do that is to install [miniconda](https://docs.conda.io/en/latest/miniconda.html) and execute 
+
+    conda install -c conda-forge firefox geckodriver
