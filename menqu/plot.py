@@ -182,17 +182,18 @@ class App:
         self.wells_container = Column()
         self.bargraphs_container = Column()
         self.table_container = Column()
+        self._tabs = Tabs(tabs=[
+                    Panel(child=self.plot_container, title="Heatmap"),
+                    Panel(child=self.bargraphs_container, title="Bargraphs"),
+                    Panel(child=self.table_container, title="Table")
+                    ])
         self._main_column = Column(
                 Div(text="", height=100), 
                 Row(Div(text="", width=100), self.tools_container),
                 Div(text="", height=100), 
                 Row(Div(text="", width=100), 
-                Tabs(tabs=[
-                    Panel(child=self.plot_container, title="Heatmap"),
-                    Panel(child=self.bargraphs_container, title="Bargraphs"),
-                    Panel(child=self.table_container, title="Table")
-                    ])
-                )
+                    self._tabs
+                    )
                 )
 
         self.root = Column(
@@ -336,7 +337,7 @@ class App:
 
     @mutate_bokeh
     def export_as_svg(self, filename):
-        p = self.plot_container
+        p = self._tabs.tabs[self._tabs.active].child
         self._change_backend_to_svg(p)
         export_svg(p, filename=filename)
 
