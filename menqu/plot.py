@@ -321,6 +321,14 @@ class App:
 
         self.bargraphs.redraw()
 
+        self.table._gene_data = gene_data
+        self.table._condition_data = condition_data
+        self.table._genes = genes
+        self.table._conditions = conditions
+        self.table._samples = samples
+
+        self.table.redraw()
+
     def save_to_menqu(self, filename):
         self._get_color_data()
         with open(filename, mode="wb") as f:
