@@ -383,7 +383,8 @@ class App:
         means = []
         samples = []
         genes = []
-        repitions = [[] for x in data[0].data]
+        max_repititions = max(len(x.data) for x in data)
+        repitions = [[] for x in range(max_repititions)]
         for m in data:
             mean = np.sum(2**-x for x in m.data if x is not None) / np.sum(1 for x in m.data if x is not None)
             for i, x in enumerate(m.data):
