@@ -235,7 +235,7 @@ class Table:
         d = self._gene_data
 
         for condition in self._conditions:
-            d[condition] = [self._condition_data[condition][self._condition_data["Sample"].index(sample)] for sample in d["Sample"]]
+            d[condition] = [self._condition_data[condition][self._condition_data["Sample"].index(sample)] for sample in d["Sample"] if sample in self._condition_data["Sample"]]
 
         template_update_1 = '<% if (value === "True") {print(\'<div style="height: 20px; width: 20px; background-color:'
         template_update_2 = ';"></div>\')} %>'
