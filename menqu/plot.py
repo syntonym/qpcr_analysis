@@ -389,6 +389,8 @@ class App:
             mean = np.sum(2**-x for x in m.data if x is not None) / np.sum(1 for x in m.data if x is not None)
             for i, x in enumerate(m.data):
                 repitions[i].append(2**-x if x is not None else None)
+            for i in range(len(m.data), max_repititions):
+                repitions[i].append(None)
 
             means.append(mean)
             samples.append(str(m.identifier))

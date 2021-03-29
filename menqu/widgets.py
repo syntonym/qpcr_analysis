@@ -75,13 +75,12 @@ class BarGraphs(WithConditions):
             p.xaxis.visible = False
             mask = np.array(self._gene_data["Gene"]) == gene
             x_values = np.array(self._gene_data["Sample"])[mask]
-            r1, r2, r3 =  [np.array(self._gene_data[replicate], dtype=np.float)[mask] for replicate in ["R1", "R2", "R3"]]
+            rs =  [np.array(self._gene_data[replicate], dtype=np.float)[mask] for replicate in [f"R{i}" for i in range(1, len(self._gene_data)-2)]]
             p.vbar(x=x_values, top=np.array(self._gene_data["mean"])[mask], bottom=0, fill_color="black", line_color="black", fill_alpha=0.5, width=0.8)
-            p.circle(x=x_values, y=r1, color="black")
-            p.circle(x=x_values, y=r2, color="black")
-            p.circle(x=x_values, y=r3, color="black")
+            for r in rs:
+                p.circle(x=x_values, y=r, color="black")
 
-            stacked_data = np.stack((r1, r2, r3))
+            stacked_data = np.stack(rs)
             mean = np.nanmean(stacked_data, axis=0)
             std = np.nanstd(stacked_data, axis=0)
 
