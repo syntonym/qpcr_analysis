@@ -1,3 +1,19 @@
+"""
+Services that need to be run in seperate threads
+
+We have two main components: The bokeh server (generating plots) and the pywebview (showing the GUI).
+
+Pywebview uses system libraries (qt or gtk on linux) to show a browser window withouth decorations.
+It provides functions to interact with the OS like (1) close the window, (2) popup a file saving diolog, 
+(3) popup a file loading dialog. The file dialog functions are blocking until the user chooses a file. 
+
+The Bokeh server generates plots which are syncronized via a websocket to the client. Actions on the client side
+can trigger callbacks which are processed by the server.
+
+So that the bokeh server and handling the pywebview functions does not interfer with each other, they're running in seperate threads. 
+There are three threads: The pywebview GUI thread, the pywebview function handling thread (OSThread) and the Bokeh Server thread (BokehThread). OSThread and BokehThread communicate via a ZMQ socket when necessary (e.g. when exiting and closing).
+"""
+
 import threading
 import asyncio
 import os
@@ -10,16 +26,13 @@ from menqu.plot import App
 import zmq
 from bokeh.server.server import Server
 
-class BokehServer(threading.Thread):
+class BokehThread(threading.Thread):
 
     def __init__(self, port):
         self.port = port
         super().__init__()
 
     def run(self):
-        # Setting num_procs here means we can't touch the IOLoop before now, we must
-        # let Server handle that. If you need to explicitly handle IOLoops then you
-        # will need to use the lower level BaseServer class.
 
         self.loop = loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -38,16 +51,17 @@ class BokehServer(threading.Thread):
         server.io_loop.start()
 
     def stop(self):
+        """Schedule stopping"""
         self.loop.call_soon_threadsafe(self._stop)
 
     def _stop(self):
-
+        """Stop the server"""
         self.loop.stop()
         self.context.destroy(linger=0)
         self.context.term()
         self.stop()
 
-class WebViewThread(threading.Thread):
+class OSThread(threading.Thread):
 
     def __init__(self, window, port):
         super().__init__()
@@ -101,24 +115,21 @@ class WebViewThread(threading.Thread):
                 window.destroy()
                 sys.exit(0)
 
-def start_py_web_view(port, bokeh_server):
-    window = webview.create_window('menqu', 'http://localhost:5006/')
-
-    web_view_thread = WebViewThread(window, port)
-
-    window.closing += bokeh_server.stop
-    window.closing += web_view_thread.stop
-
-    webview.start()
-
 def start_all():
     PORT = 21934
 
-    webview = BokehServer(PORT)
-    webview.start()
+    bokeh_thread = BokehThread(PORT)
+    bokeh_thread.start()
 
-    #webview.join()
-
+    # make sure bokeh started up and bound to port 5006
     time.sleep(0.3)
 
-    start_py_web_view(PORT, webview)
+    window = webview.create_window('menqu', 'http://localhost:5006/')
+
+    web_view_thread = OSThread(window, PORT)
+    web_view_thread.start()
+
+    window.closing += bokeh_thread.stop
+    window.closing += web_view_thread.stop
+
+    webview.start()
