@@ -18,8 +18,9 @@ from menqu.helpers import apply_theme
 from menqu.themes import CONDITIONS_THEME
 
 from menqu.analysis import prepare, _main, parse_well, get_sample_data, _update
-from menqu.widgets import BarGraphs, HeatmapGraphs, ColorPickers, Table
+from menqu.widgets import BarGraphs, HeatmapGraphs, ColorPickers, Table, WellExcluder
 from menqu.updater import update, needs_update
+from menqu.datasources import get_fake_data, get_fake_data2, load_from_menqu_file
 import sys
 import os.path
 import appdirs
@@ -47,75 +48,6 @@ def mutate_bokeh(f):
         self._doc.add_next_tick_callback(lambda: f(self, *args, **kwargs))
     return wrapped
 
-
-def get_fake_data():
-    gene_data = {"R1": np.array([1, 2, 4, 4]),
-            "R2": np.array([2, 1, 4, 4]),
-            "R3":np.array([1, 2, 4, 4]),
-            "Sample": ["1", "1", "2", "2"], "Gene":["HOXB", "SHO", "HOXB", "SHO"]}
-
-    gene_data["mean"] = (gene_data["R1"] + gene_data["R2"] + gene_data["R3"]) / 3
-
-    condition_data = {"Sample": ["1", "2"],
-            "groß": ["True", "False"],
-            "schnell": ["False", "True"],
-            "rot": ["True", "True"]
-            }
-
-    conditions = ["groß", "schnell", "rot"]
-    genes = ["HOXB", "SHO"]
-    samples = ["1", "2"]
-
-    colors = {"groß": "red", "schnell": "blue", "rot":"green"}
-
-    gene_data["R1"] = gene_data["R1"].tolist()
-    gene_data["R2"] = gene_data["R2"].tolist()
-    gene_data["R3"] = gene_data["R3"].tolist()
-
-    name = "TestData1"
-
-    return {"gene_data": gene_data, "condition_data": condition_data, "conditions": conditions, "genes": genes, "samples":samples, "colors":colors, "name":name}
-
-def get_fake_data2():
-    gene_data = {"R1": np.array([1, 2, 4, 4, 5, 2]),
-            "R2": np.array([2, 1, 4, 4, 5, 2]),
-            "R3":np.array([1, 2, 4, 4, 5, 2]),
-            "Sample": ["1", "1", "2", "2", "pluri", "pluri"], "Gene":["A", "B", "A", "B", "A", "B"]}
-
-    gene_data["mean"] = (gene_data["R1"] + gene_data["R2"] + gene_data["R3"]) / 3
-
-    condition_data = {"Sample": ["1", "2", "pluri"],
-            "beating": ["True", "False", "True"],
-            "3D": ["False", "True", "False"],
-            }
-
-    conditions = ["beating", "3D"]
-    genes = ["A", "B"]
-    samples = ["1", "2", "pluri"]
-
-    colors = {"beating": "#AAAA00", "3D": "blue"}
-
-    name = "TestData2"
-
-    return {"gene_data": gene_data, "condition_data": condition_data, "conditions": conditions, "genes": genes, "samples":samples, "colors":colors, "name":name}
-
-def load_from_menqu(data, filename):
-    with open(filename, mode="rb") as f:
-        data = pickle.load(f)
-    assert data["version"] == 1
-    return data["data"]
-
-class WellExcluder:
-
-    def __init__(self, root):
-        self._root = root
-        self._tp = TextInput()
-        self._root_widget = Column(Div(text="Wells to Exclude"), self._tp)
-
-        root.children.append(self._root_widget)
-
-    def get_excluded_wells(self):
-        return [parse_well(well.strip()) if well.strip() else None for well in self._tp.value.split(",")]
 
 class App:
 
@@ -227,7 +159,7 @@ class App:
             self._socket_in_use = False
 
             if file != b"":
-                self.load_from_menqu(file)
+                self.load_from_menqu_file(file)
 
     async def export_file_dialog(self):
         if self.socket and not self._socket_in_use:

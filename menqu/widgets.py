@@ -2,20 +2,22 @@
 Bokeh is used to visualize data. It's building blocks are models, which are
 syncronized with the client browser. As far as I found there is no support for
 building more complex widgets from building blocks. This module contains classes
-which generate bokeh models from data when calling `_draw()`. It populates the `_root` 
-container, which should be added to the bokeh document. When data changes `redraw()` has
-to be called, which mutates the `_root` container.
+which generate bokeh models from data when calling `_draw()`. It populates a `_root_widget` 
+container, which is added as a child to a passed container. When data changes `redraw()` 
+has to be called, which mutates the `_root_widget`.
 """
+
 from bokeh.plotting import figure
 from bokeh.palettes import Viridis256
 from bokeh.core.properties import value
 from bokeh.transform import linear_cmap
-from bokeh.models import Column, FactorRange, ColumnDataSource, BooleanFilter, CDSView, Row, ColorPicker, DataTable, TableColumn
+from bokeh.models import Column, FactorRange, ColumnDataSource, BooleanFilter, CDSView, Row, ColorPicker, DataTable, TableColumn, TextInput, Div
 from bokeh.models.widgets.tables import HTMLTemplateFormatter
 from bokeh.models.callbacks import CustomJS
 
 from menqu.helpers import apply_theme, general_mapper
 from menqu.themes import CONDITIONS_THEME
+from menqu.analysis import parse_well
 
 import numpy as np
 
@@ -67,13 +69,13 @@ class BarGraphs(WithConditions):
 
         self._condition_height = 25
 
-        self._root = Column()
+        self._root_widget = Column()
         self._draw()
 
-        root.children.append(self._root)
+        root.children.append(self._root_widget)
 
     def redraw(self):
-        self._root.children = []
+        self._root_widget.children = []
         self._draw()
 
     def _draw(self):
@@ -97,10 +99,10 @@ class BarGraphs(WithConditions):
 
             p.min_border_left = MIN_BORDER_LEFT
 
-            self._root.children.append(p)
+            self._root_widget.children.append(p)
 
         p = self.draw_conditions(self._xrange, self._condition_data)
-        self._root.children.append(p)
+        self._root_widget.children.append(p)
 
 class HeatmapGraphs(WithConditions):
 
@@ -119,14 +121,14 @@ class HeatmapGraphs(WithConditions):
 
         self._condition_height = 25
 
-        self._root = Column()
+        self._root_widget = Column()
         self._draw_everything()
 
-        root.children.append(self._root)
+        root.children.append(self._root_widget)
 
 
     def redraw(self):
-        self._root.children = []
+        self._root_widget.children = []
         self._draw_everything()
 
     def _calculate_maxvalues(self):
@@ -150,8 +152,8 @@ class HeatmapGraphs(WithConditions):
         p_heatmap = self.draw_heatmap(self._xrange, self._gene_data, self._genes)
         p_cond = self.draw_conditions(self._xrange, self._condition_data)
 
-        self._root.children.append(p_heatmap)
-        self._root.children.append(p_cond)
+        self._root_widget.children.append(p_heatmap)
+        self._root_widget.children.append(p_cond)
 
     def draw_heatmap(self, xaxis, source, genes):
         cds = ColumnDataSource(source)
@@ -228,13 +230,13 @@ class Table:
 
         self._condition_height = 25
 
-        self._root = Column()
+        self._root_widget = Column()
         self._draw()
 
-        root.children.append(self._root)
+        root.children.append(self._root_widget)
 
     def redraw(self):
-        self._root.children = []
+        self._root_widget.children = []
         self._draw()
 
     def _draw(self):
@@ -272,7 +274,17 @@ class Table:
         for cp, formatter, col in zip(self._color_pickers.values(), formatters, condition_columns):
             cp.js_on_change("color", CustomJS(args={"cp": cp, "col":col, "form": formatter, "dt": dt}, code=code))
 
-        self._root.children.append(dt)
+        self._root_widget.children.append(dt)
 
         dt.source.patch({})
 
+class WellExcluder:
+
+    def __init__(self, root):
+        self._tp = TextInput()
+        self._root_widget = Column(Div(text="Wells to Exclude"), self._tp)
+
+        root.children.append(self._root_widget)
+
+    def get_excluded_wells(self):
+        return [parse_well(well.strip()) if well.strip() else None for well in self._tp.value.split(",")]
