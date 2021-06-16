@@ -18,9 +18,9 @@ from menqu.helpers import apply_theme
 from menqu.themes import CONDITIONS_THEME
 
 from menqu.analysis import prepare, _main, parse_well, get_sample_data, _update
-from menqu.widgets import BarGraphs, HeatmapGraphs, ColorPickers, Table, WellExcluder
+from menqu.widgets import BarGraphs, HeatmapGraphs, ColorPickers, Table, WellExcluder, ButtonBar
 from menqu.updater import update, needs_update
-from menqu.datasources import get_fake_data, get_fake_data2, load_from_menqu_file
+from menqu.datasources import get_fake_data, get_fake_data2, load_from_menqu_file, save_to_menqu_file
 import sys
 import os.path
 import appdirs
@@ -65,38 +65,6 @@ class App:
 
         self.socket = None
 
-        _buttons = []
-        BUTTON_WIDTH = 100
-
-        button_save = Button(label="Save", width=BUTTON_WIDTH)
-        button_save.on_click(lambda: asyncio.ensure_future(self.save_file_dialog()))
-        _buttons.append(button_save)
-
-        button_load = Button(label="Load", width=BUTTON_WIDTH)
-        button_load.on_click(lambda: asyncio.ensure_future(self.load_file_dialog()))
-        _buttons.append(button_load)
-
-        button_export = Button(label="Export", width=BUTTON_WIDTH)
-        button_export.on_click(lambda: asyncio.ensure_future(self.export_file_dialog()))
-        _buttons.append(button_export)
-
-        button_exit = Button(label="Exit", width=BUTTON_WIDTH, name="ExitButton")
-        button_exit.on_click(lambda: asyncio.ensure_future(self.exit()))
-        _buttons.append(button_exit)
-
-        button_import = Button(label="Import from Excel", width=200)
-        button_import.on_click(lambda: asyncio.ensure_future(self._import()))
-        _buttons.append(button_import)
-
-        button_ordering = Button(label="Reimport Graph Ordering", width=200)
-        button_ordering.on_click(lambda: asyncio.ensure_future(self._import_graph_ordering()))
-        _buttons.append(button_ordering)
-
-        button_update = Button(label="Update", width=200)
-        button_ordering.on_click(lambda: asyncio.ensure_future(self.update()))
-        update_needed, self._update_url = needs_update(menqu.__version__)
-        if update_needed:
-            _buttons.append(button_update)
 
         self.tools_container = Row()
         self.plot_container = Column()
@@ -117,9 +85,9 @@ class App:
                     )
                 )
 
-        self.root = Column(
-                Row(*_buttons), 
-                self._main_column)
+        self.root = Column()
+        self._button_bar = ButtonBar(self.root, self)
+        self.root.children.append(self._main_column)
 
         self.colorpickers = ColorPickers(self.tools_container, conditions=conditions, colors=colors, app=self)
         self.heatmap = HeatmapGraphs(self.plot_container, gene_data, condition_data, samples, genes, conditions, color_pickers=self.colorpickers.color_pickers)
@@ -183,6 +151,9 @@ class App:
     async def update(self):
         if self._update_url != None:
             update(self._update_url)
+
+    def update_needed(self):
+        return needs_update(menqu.__version__)
 
     def save_colors(self):
         pathlib.Path(CACHE_DIR).mkdir(parents=True, exist_ok=True)
@@ -252,17 +223,15 @@ class App:
 
     def save_to_menqu(self, filename):
         self._get_color_data()
-        with open(filename, mode="wb") as f:
-            pickle.dump({"version":1, "data": self.data}, f)
+        save_to_menqu_file(self.data, filename)
+
+    def load_from_menqu(self, name):
+        data = load_from_menqu_file(name)
+        self.load_data(data)
 
     def _get_color_data(self):
         for name, cp in self.colorpickers.color_pickers.items():
             self.data["colors"][name] = cp.color
-
-    def load_from_menqu(self, name):
-        with open(name, mode='rb') as f:
-            data = pickle.load(f)
-        self.load_data(data["data"])
 
     @mutate_bokeh
     def export_as_svg(self, filename):

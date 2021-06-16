@@ -11,17 +11,60 @@ from bokeh.plotting import figure
 from bokeh.palettes import Viridis256
 from bokeh.core.properties import value
 from bokeh.transform import linear_cmap
-from bokeh.models import Column, FactorRange, ColumnDataSource, BooleanFilter, CDSView, Row, ColorPicker, DataTable, TableColumn, TextInput, Div
+from bokeh.models import Column, FactorRange, ColumnDataSource, BooleanFilter, CDSView, Row, ColorPicker, DataTable, TableColumn, TextInput, Div, Button
 from bokeh.models.widgets.tables import HTMLTemplateFormatter
 from bokeh.models.callbacks import CustomJS
 
+import menqu
 from menqu.helpers import apply_theme, general_mapper
 from menqu.themes import CONDITIONS_THEME
 from menqu.analysis import parse_well
+import asyncio
 
 import numpy as np
 
 MIN_BORDER_LEFT = 100
+
+class ButtonBar:
+
+    def __init__(self, root, app):
+        self.app = app
+
+        _buttons = []
+        BUTTON_WIDTH = 100
+
+        button_save = Button(label="Save", width=BUTTON_WIDTH)
+        button_save.on_click(lambda: asyncio.ensure_future(self.app.save_file_dialog()))
+        _buttons.append(button_save)
+
+        button_load = Button(label="Load", width=BUTTON_WIDTH)
+        button_load.on_click(lambda: asyncio.ensure_future(self.app.load_file_dialog()))
+        _buttons.append(button_load)
+
+        button_export = Button(label="Export", width=BUTTON_WIDTH)
+        button_export.on_click(lambda: asyncio.ensure_future(self.app.export_file_dialog()))
+        _buttons.append(button_export)
+
+        button_exit = Button(label="Exit", width=BUTTON_WIDTH, name="ExitButton")
+        button_exit.on_click(lambda: asyncio.ensure_future(self.app.exit()))
+        _buttons.append(button_exit)
+
+        button_import = Button(label="Import from Excel", width=200)
+        button_import.on_click(lambda: asyncio.ensure_future(self.app._import()))
+        _buttons.append(button_import)
+
+        button_ordering = Button(label="Reimport Graph Ordering", width=200)
+        button_ordering.on_click(lambda: asyncio.ensure_future(self.app._import_graph_ordering()))
+        _buttons.append(button_ordering)
+
+        button_update = Button(label="Update", width=200)
+        button_ordering.on_click(lambda: asyncio.ensure_future(self.app.update()))
+        update_needed, self._update_url = self.app.update_needed()
+        if update_needed:
+            _buttons.append(button_update)
+
+        self._root_widget = Row(children=_buttons)
+        root.children.append(self._root_widget)
 
 class WithConditions:
 
