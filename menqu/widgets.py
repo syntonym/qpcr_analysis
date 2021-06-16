@@ -1,3 +1,11 @@
+"""
+Bokeh is used to visualize data. It's building blocks are models, which are
+syncronized with the client browser. As far as I found there is no support for
+building more complex widgets from building blocks. This module contains classes
+which generate bokeh models from data when calling `_draw()`. It populates the `_root` 
+container, which should be added to the bokeh document. When data changes `redraw()` has
+to be called, which mutates the `_root` container.
+"""
 from bokeh.plotting import figure
 from bokeh.palettes import Viridis256
 from bokeh.core.properties import value
@@ -201,7 +209,6 @@ class ColorPickers:
                 current_row = Row()
             current_row.children.append(cp)
         self._root_widget.children.append(current_row)
-
 
 class Table:
 
