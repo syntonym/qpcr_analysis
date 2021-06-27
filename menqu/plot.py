@@ -32,6 +32,7 @@ CACHE_DIR = appdirs.user_cache_dir("menqu")
 CACHE_FILE = os.path.join(CACHE_DIR, "cache")
 
 from menqu.helpers import get_app, get_analysisbook, map_show, plot_data, export_as_svg, show
+from menqu.widgets import RootWidget
 import numpy as np
 import pickle
 import pandas
@@ -65,37 +66,11 @@ class App:
 
         self.socket = None
 
+        data = {"gene_data": gene_data, "condition_data": condition_data, "samples": samples,
+                "genes": genes, "conditions": conditions, "colors": colors}
+        self.root_widget = RootWidget(self, data)
+        self.root = self.root_widget.root
 
-        self.tools_container = Row()
-        self.plot_container = Column()
-        self.wells_container = Column()
-        self.bargraphs_container = Column()
-        self.table_container = Column()
-        self._tabs = Tabs(tabs=[
-                    Panel(child=self.plot_container, title="Heatmap"),
-                    Panel(child=self.bargraphs_container, title="Bargraphs"),
-                    Panel(child=self.table_container, title="Table")
-                    ])
-        self._main_column = Column(
-                Div(text="", height=100), 
-                Row(Div(text="", width=100), self.tools_container),
-                Div(text="", height=100), 
-                Row(Div(text="", width=100), 
-                    self._tabs
-                    )
-                )
-
-        self.root = Column()
-        self._button_bar = ButtonBar(self.root, self)
-        self.root.children.append(self._main_column)
-
-        self.colorpickers = ColorPickers(self.tools_container, conditions=conditions, colors=colors, app=self)
-        self.heatmap = HeatmapGraphs(self.plot_container, gene_data, condition_data, samples, genes, conditions, color_pickers=self.colorpickers.color_pickers)
-        self.well_excluder = WellExcluder(self.wells_container)
-
-        self.bargraphs = BarGraphs(self.bargraphs_container, gene_data, condition_data, samples, genes, conditions, color_pickers=self.colorpickers.color_pickers)
-
-        self.table = Table(self.table_container, gene_data, condition_data, samples, genes, conditions, color_pickers=self.colorpickers.color_pickers)
 
         self._socket_in_use = False
 
@@ -256,15 +231,13 @@ class App:
 
     @mutate_bokeh
     def _import_step1(self):
-        self.root.children.remove(self._main_column)
-        self.root.children.append(self.wells_container)
+        self.root_widget.show_wells()
 
         self._app, self._databook, self._analysisbook = prepare()
 
     @mutate_bokeh
     def _import_step2(self):
-        self.root.children.append(self._main_column)
-        self.root.children.remove(self.wells_container)
+        self.root_widget.show_main()
 
         excluded_wells = self.well_excluder.get_excluded_wells()
 
