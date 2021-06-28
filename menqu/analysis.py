@@ -10,6 +10,7 @@ import pickle
 from os.path import join as pjoin
 from menqu.updater import needs_update, update
 import menqu
+from collections import defaultdict
 
 
 Measurement = namedtuple("Measurement", ["data", "gene_name", "gene_type", "identifier"])
@@ -34,6 +35,18 @@ def _update():
 def save_as_pickle(obj, name):
     with open(name, mode="wb") as f:
         pickle.dump(obj, f)
+
+def _main_csv(data):
+    check_data_validity(data)
+    data = sorted(data, key=lambda m: (str(m.gene_type) if m.gene_type else '', str(m.gene_name) if m.gene_name else '', str(m.identifier).zfill(4) if m.identifier else ''))
+
+    data = [m for m in data if any(m.data)]
+    housekeeping = calculate_housekeeping_normalisation(data)
+    print(housekeeping)
+    data = normalize_housekeeping(data, housekeeping)
+    pluripotent = calculate_pluripotent_normalisation(data)
+    data = normalize_pluripotent(data, pluripotent)
+    return data
 
 def _main(app, databook, analysisbook, excluded_wells):
     color_mapping = read_gene_mapping(analysisbook)
@@ -203,7 +216,6 @@ def check_data_validity(data):
                 
 def read_data(databook, color_mapping, identifier_mapping, excluded_wells):
 
-
     well_to_gene = {}
     data_per_gene = {}
     data_matrix = []
@@ -241,6 +253,44 @@ def read_data(databook, color_mapping, identifier_mapping, excluded_wells):
              data_matrix.append(Measurement(measurements, gene_name,  gene_type , identifier))
     #data_matrix.append(Measurement(filled_data[0], filled_data[1], filled_data[2], gene_name, gene_type, identifier))
     filled_data = []
+
+    return data_matrix
+
+def metadata_from_pandas(df):
+    well_to_identifier = {}
+    well_to_gene = {}
+    for _, row in df.iterrows():
+        well = row["Well"]
+        target = str(row["Target"])
+        sample = str(row["Sample"])
+        content = str(row["Content"])
+
+        if target == "nan" and sample == "nan":
+            continue
+
+        well_to_gene[well] = target
+        well_to_identifier[well] = sample
+
+    return well_to_identifier, well_to_gene
+
+def data_matrix_from_pandas(df, well_to_gene, well_to_identifier, gene_to_gene_type, excluded_wells):
+    data_matrix = []
+    measurements = defaultdict(list)
+    for _, row in df.iterrows():
+        well = row["Well"]
+        if well in excluded_wells:
+            continue
+        m = row["Cq"]
+        identifier = well_to_identifier.get(well, None)
+        gene = well_to_gene.get(well, None)
+        gene_type = gene_to_gene_type.get(gene, None)
+        measurements[identifier].append((m, gene, gene_type, identifier))
+
+    for identifier in measurements:
+        ms = [x[0] for x in measurements[identifier]]
+        _, gene_name, gene_type, identifier = measurements[identifier][0]
+
+        data_matrix.append(Measurement(ms, gene_name, gene_type, identifier))
 
     return data_matrix
 

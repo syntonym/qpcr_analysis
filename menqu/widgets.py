@@ -11,14 +11,15 @@ from bokeh.plotting import figure
 from bokeh.palettes import Viridis256
 from bokeh.core.properties import value
 from bokeh.transform import linear_cmap
-from bokeh.models import Column, FactorRange, ColumnDataSource, BooleanFilter, CDSView, Row, ColorPicker, DataTable, TableColumn, TextInput, Div, Button, Tabs, Panel
+from bokeh.models import Column, FactorRange, ColumnDataSource, BooleanFilter, CDSView, Row, ColorPicker, DataTable, TableColumn, TextInput, Div, Button, Tabs, Panel, Dropdown
 from bokeh.models.widgets.tables import HTMLTemplateFormatter
 from bokeh.models.callbacks import CustomJS
 
 import menqu
-from menqu.helpers import apply_theme, general_mapper
+from menqu.helpers import apply_theme, general_mapper, mutate_bokeh
 from menqu.themes import CONDITIONS_THEME
 from menqu.analysis import parse_well
+from menqu.data_importers import ExcelImporter, CSVImporter
 import asyncio
 
 import numpy as np
@@ -34,21 +35,15 @@ class Widget:
 
     def update(self, d):
         # update this widget
-        for name, value in d.items():
-            self._data[name] = value
-
-        # figure out which child widgets need to be updated with which data
-        to_update = defaultdict(list)
-        for name, value in d.items():
-            for child_widget in self._links[name]:
-                to_update[child_widget].append(name)
+        for dataname, datavalue in d.items():
+            self._data[dataname] = datavalue
 
         # update the child widget with all data it needs in one go
-        for child_widget, datas in to_update.items():
-            child_widget.update({d[name] for name in datas})
+        for child_widget, data_names in self._links.items():
+            child_widget.update({data_name: d[data_name] for data_name in data_names if data_name in d})
 
-    def link(self, child, dataname):
-        self._links[child].append(dataname)
+    def link(self, widget, dataname):
+        self._links[widget].append(dataname)
 
 class RootWidget(Widget):
 
@@ -62,6 +57,9 @@ class RootWidget(Widget):
         self.wells_container = Column()
         self.bargraphs_container = Column()
         self.table_container = Column()
+        self.importer_container = Column()
+        self.importer_csv_container = Column()
+
         self._tabs = Tabs(tabs=[
                     Panel(child=self.plot_container, title="Heatmap"),
                     Panel(child=self.bargraphs_container, title="Bargraphs"),
@@ -77,7 +75,7 @@ class RootWidget(Widget):
                 )
 
         self.root = Column()
-        self._button_bar = ButtonBar(self.root, app)
+        self._button_bar = ButtonBar(self.root, app, self)
         self.root.children.append(self._main_column)
 
         self.colorpickers = ColorPickers(self.tools_container, {"conditions": data["conditions"], "colors": data["colors"]}, app=self)
@@ -85,27 +83,40 @@ class RootWidget(Widget):
         self.link(self.colorpickers, "colors")
 
         self.heatmap = HeatmapGraphs(self.plot_container, data, color_pickers=self.colorpickers.color_pickers)
-        self.well_excluder = WellExcluder(self.wells_container)
 
         self.bargraphs = BarGraphs(self.bargraphs_container, data, color_pickers=self.colorpickers.color_pickers)
 
         self.table = Table(self.table_container, data, color_pickers=self.colorpickers.color_pickers)
 
+        self.excel_importer = ExcelImportWidget(self.importer_container, app, self)
+
+        self.csv_importer = CSVImportWidget(self.importer_csv_container, app, self, {"genes": data["genes"]})
+
         for widget in [self.heatmap, self.bargraphs, self.table]:
             for data_name in data:
                 self.link(widget, data_name)
 
-    def show_wells(self):
+        self.link(self.csv_importer, "genes")
+
+    def show_excel_importer(self):
         self.root.children.remove(self._main_column)
-        self.root.children.append(self.wells_container)
+        self.root.children.append(self.importer_container)
+
+    def show_csv_importer(self):
+        if self._main_column in self.root.children:
+            self.root.children.remove(self._main_column)
+        self.root.children.append(self.importer_csv_container)
 
     def show_main(self):
-        self.root.children.remove(self.wells_container)
+        if self.importer_container in self.root.children:
+            self.root.children.remove(self.importer_container)
+        if self.importer_csv_container in self.root.children:
+            self.root.children.remove(self.importer_csv_container)
         self.root.children.append(self._main_column)
 
 class ButtonBar(Widget):
 
-    def __init__(self, root, app):
+    def __init__(self, root, app, root_widget):
         super().__init__({})
         self.app = app
 
@@ -129,7 +140,11 @@ class ButtonBar(Widget):
         _buttons.append(button_exit)
 
         button_import = Button(label="Import from Excel", width=200)
-        button_import.on_click(lambda: asyncio.ensure_future(self.app._import()))
+        button_import.on_click(root_widget.show_excel_importer)
+        _buttons.append(button_import)
+
+        button_import = Button(label="Import from CSV", width=200)
+        button_import.on_click(root_widget.show_csv_importer)
         _buttons.append(button_import)
 
         button_ordering = Button(label="Reimport Graph Ordering", width=200)
@@ -395,3 +410,115 @@ class WellExcluder:
 
     def get_excluded_wells(self):
         return [parse_well(well.strip()) if well.strip() else None for well in self._tp.value.split(",")]
+
+class ExcelImportWidget(Widget):
+
+    def __init__(self, root, app, root_widget):
+        super().__init__({})
+        self.app = app
+
+        BUTTON_WIDTH = 100
+        self._title = Div(text="Excel Importer")
+        self._button_back = Button(label="Back", width=BUTTON_WIDTH)
+        self._button_back.on_click(root_widget.show_main)
+
+        self._button = Button(label="Import", width=BUTTON_WIDTH)
+        self._button.on_click(lambda: asyncio.ensure_future(self.import_))
+
+        self._button_bar = Row(self._button_back, self._button)
+
+        self._root_widget = Column(self._button_bar, self._title)
+
+        self.well_excluder = WellExcluder(self._root_widget)
+        root.children.append(self._root_widget)
+
+        self._importer = ExcelImporter()
+
+    async def import_(self):
+        excluded_wells = self.well_excluder.get_excluded_wells()
+        self._importer.prepare()
+        data = self._importer.import_(excluded_wells)
+        self.app.load_data(data)
+
+class HKSelector(Widget):
+
+    def __init__(self, root, app, data):
+        super().__init__(data)
+        self.app = app
+        self.root_widget = Dropdown(label="Housekeeping Gene", menu=[("X", "X")])
+        self.value = None
+        root.children.append(self.root_widget)
+
+        self.root_widget.on_click(self.on_click)
+
+        self.update(data)
+
+    def update(self, d):
+        print("Updating HKSelector")
+        super().update(d)
+        self.root_widget.menu = [(x, x) for x in self._data["genes"]]
+        if self.value not in self._data["genes"]:
+            self.set_value(None)
+
+    def set_value(self, value):
+        self.value = value
+        if value:
+            self.root_widget.label = value
+            self.root_widget.button_type = "success"
+        else:
+            self.root_widget.label = "Housekeeping Gene"
+            self.root_widget.button_type = "warning"
+
+    def on_click(self, event):
+        self.set_value(event.item)
+
+    def get_housekeeping(self):
+        return self.value
+
+
+class CSVImportWidget(Widget):
+
+    def __init__(self, root, app, root_widget, data):
+        super().__init__(data)
+        self.app = app
+
+        BUTTON_WIDTH = 100
+        self._title = Div(text="CSV Importer")
+        self._button_back = Button(label="Back", width=BUTTON_WIDTH)
+        self._button_back.on_click(root_widget.show_main)
+
+        self._button = Button(label="Import", width=BUTTON_WIDTH)
+        self._button.on_click(lambda: asyncio.ensure_future(self.import_()))
+
+        self._button_genes = Button(label="Import Genes", width=BUTTON_WIDTH)
+        self._button_genes.on_click(lambda: asyncio.ensure_future(self.import_genes()))
+
+        self._button_bar = Row(self._button_back, self._button_genes, self._button)
+
+
+
+        self.hk_selector_container = Row()
+        self.hk_selector = HKSelector(self.hk_selector_container, app, data)
+        self.link(self.hk_selector, "genes")
+        print(self._links)
+
+        self._root_widget = Column(self._button_bar, self._title, self.hk_selector_container)
+        self.well_excluder = WellExcluder(self._root_widget)
+        root.children.append(self._root_widget)
+
+        self._importer = CSVImporter()
+
+    async def import_genes(self):
+        path = await self.app._load_file_dialog()
+        print(path)
+        if path is not None and path != b"":
+            meta = self._importer.read_meta(path.decode("utf-8"))
+            self.app.update_data({"genes": self._importer.genes})
+
+    async def import_(self):
+        housekeeping = self.hk_selector.get_housekeeping()
+        excluded_wells = self.well_excluder.get_excluded_wells()
+        path = await self.app._load_file_dialog()
+        self._importer.path_data = path.decode("utf8")
+        data = self._importer.import_(excluded_wells, housekeeping)
+        self.app.load_data(data)

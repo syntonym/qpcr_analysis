@@ -169,3 +169,8 @@ def general_mapper(column, mapped_to, to_map):
 
     return transform(column, t)
 
+
+def mutate_bokeh(f):
+    def wrapped(self, *args, **kwargs):
+        self._doc.add_next_tick_callback(lambda: f(self, *args, **kwargs))
+    return wrapped

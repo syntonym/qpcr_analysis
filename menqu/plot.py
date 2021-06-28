@@ -31,7 +31,7 @@ EXCEL_AREA = 'A1:M1000'
 CACHE_DIR = appdirs.user_cache_dir("menqu")
 CACHE_FILE = os.path.join(CACHE_DIR, "cache")
 
-from menqu.helpers import get_app, get_analysisbook, map_show, plot_data, export_as_svg, show
+from menqu.helpers import get_app, get_analysisbook, map_show, plot_data, export_as_svg, show, mutate_bokeh
 from menqu.widgets import RootWidget
 import numpy as np
 import pickle
@@ -43,11 +43,6 @@ from bokeh.models import Row, Column,  TextInput, Div, Button, ColorPicker, Chec
 from bokeh.layouts import layout, grid
 from bokeh.plotting import figure
 from bokeh.models import ColumnDataSource, Whisker, FactorRange, CDSView, BooleanFilter
-
-def mutate_bokeh(f):
-    def wrapped(self, *args, **kwargs):
-        self._doc.add_next_tick_callback(lambda: f(self, *args, **kwargs))
-    return wrapped
 
 
 class App:
@@ -94,15 +89,19 @@ class App:
             if file != b"":
                 self.save_to_menqu(file)
 
-    async def load_file_dialog(self):
+    async def _load_file_dialog(self):
         if self.socket and not self._socket_in_use:
             self._socket_in_use = True
             await self.socket.send(b"LOAD")
             file = await self.socket.recv()
             self._socket_in_use = False
+            return file
+        return None
 
-            if file != b"":
-                self.load_from_menqu_file(file)
+    async def load_file_dialog(self):
+        file = await self._load_file_dialog()
+        if file is not None and file != b"":
+            self.load_from_menqu_file(file)
 
     async def export_file_dialog(self):
         if self.socket and not self._socket_in_use:
@@ -156,6 +155,10 @@ class App:
     def load_data(self, data):
         self.data = data
         self.load_data_to_plots()
+
+    @mutate_bokeh
+    def update_data(self, data):
+        self.root_widget.update(data)
 
     @mutate_bokeh
     def load_data_to_plots(self):
@@ -220,63 +223,6 @@ class App:
                 self._change_backend_to_svg(child)
         if type(p) == Figure:
             p.output_backend = "svg"
-
-    async def _import(self):
-        if self._importer_step == 0:
-            self._import_step1()
-            self._importer_step = 1
-        elif self._importer_step == 1:
-            self._import_step2()
-            self._importer_step = 0
-
-    @mutate_bokeh
-    def _import_step1(self):
-        self.root_widget.show_wells()
-
-        self._app, self._databook, self._analysisbook = prepare()
-
-    @mutate_bokeh
-    def _import_step2(self):
-        self.root_widget.show_main()
-
-        excluded_wells = self.well_excluder.get_excluded_wells()
-
-        data = _main(self._app, self._databook, self._analysisbook, excluded_wells)
-
-        means = []
-        samples = []
-        genes = []
-        max_repititions = max(len(x.data) for x in data)
-        repitions = [[] for x in range(max_repititions)]
-        for m in data:
-            mean = np.sum(2**-x for x in m.data if x is not None) / np.sum(1 for x in m.data if x is not None)
-            for i, x in enumerate(m.data):
-                repitions[i].append(2**-x if x is not None else None)
-            for i in range(len(m.data), max_repititions):
-                repitions[i].append(None)
-
-            means.append(mean)
-            samples.append(str(m.identifier))
-            genes.append(m.gene_name)
-
-        gene_data = {"mean":means, "Sample":samples, "Gene": genes, **{"R"+str(i+1) : d for i, d in enumerate(repitions)}}
-
-        samples_found = set()
-        samples = []
-        for x in gene_data["Sample"]:
-            if x in samples_found:
-                continue
-            samples.append(x)
-            samples_found.add(x)
-
-        colors = {}
-        genes = list(set(gene_data["Gene"]))
-        name = ".".join(self._databook.fullname.split(".")[:-1])
-
-        condition_data, conditions = get_sample_data(self._analysisbook)
-
-        data =  {"gene_data": gene_data, "condition_data": condition_data, "conditions": conditions, "genes": genes, "samples":samples, "colors":colors, "name":name}
-        self.load_data(data)
 
     async def _import_graph_ordering(self):
         condition_data, conditions = get_sample_data(self._analysisbook)
