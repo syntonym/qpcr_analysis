@@ -33,6 +33,7 @@ class Widget:
         self._data = data
         self._links = defaultdict(list)
 
+    @mutate_bokeh
     def update(self, d):
         # update this widget
         for dataname, datavalue in d.items():
@@ -90,13 +91,18 @@ class RootWidget(Widget):
 
         self.excel_importer = ExcelImportWidget(self.importer_container, app, self)
 
-        self.csv_importer = CSVImportWidget(self.importer_csv_container, app, self, {"genes": data["genes"]})
+        self.csv_importer = CSVImportWidget(self.importer_csv_container, app, self, {"genes": data["genes"], "samples": data["samples"]})
 
         for widget in [self.heatmap, self.bargraphs, self.table]:
             for data_name in data:
                 self.link(widget, data_name)
 
         self.link(self.csv_importer, "genes")
+        self.link(self.csv_importer, "samples")
+
+    def update(self, d):
+        super().update(d)
+        print(d)
 
     def show_excel_importer(self):
         self.root.children.remove(self._main_column)
@@ -236,6 +242,10 @@ class BarGraphs(WithConditions):
         p = self.draw_conditions(self._xrange, self._data["condition_data"])
         self._root_widget.children.append(p)
 
+    def update(self, d):
+        super().update(d)
+        self.redraw()
+
 class HeatmapGraphs(WithConditions):
 
     def __init__(self, root, data, color_pickers={}):
@@ -309,6 +319,10 @@ class HeatmapGraphs(WithConditions):
 
         return p
 
+    def update(self, d):
+        super().update(d)
+        self.redraw()
+
 class ColorPickers(Widget):
 
     def __init__(self, root, data, columns=8, app=None):
@@ -360,6 +374,10 @@ class Table(Widget):
     def redraw(self):
         self._root_widget.children = []
         self._draw()
+
+    def update(self, d):
+        super().update(d)
+        self.redraw()
 
     def _draw(self):
         d = self._data["gene_data"]
@@ -442,10 +460,12 @@ class ExcelImportWidget(Widget):
 
 class HKSelector(Widget):
 
-    def __init__(self, root, app, data):
+    def __init__(self, root, app, data, data_name, label):
         super().__init__(data)
+        self._data_name = data_name
+        self._label = label
         self.app = app
-        self.root_widget = Dropdown(label="Housekeeping Gene", menu=[("X", "X")])
+        self.root_widget = Dropdown(label=label, menu=[("X", "X")])
         self.value = None
         root.children.append(self.root_widget)
 
@@ -454,10 +474,9 @@ class HKSelector(Widget):
         self.update(data)
 
     def update(self, d):
-        print("Updating HKSelector")
         super().update(d)
-        self.root_widget.menu = [(x, x) for x in self._data["genes"]]
-        if self.value not in self._data["genes"]:
+        self.root_widget.menu = [(x, x) for x in self._data[self._data_name]]
+        if self.value not in self._data[self._data_name]:
             self.set_value(None)
 
     def set_value(self, value):
@@ -466,13 +485,13 @@ class HKSelector(Widget):
             self.root_widget.label = value
             self.root_widget.button_type = "success"
         else:
-            self.root_widget.label = "Housekeeping Gene"
+            self.root_widget.label = self._label
             self.root_widget.button_type = "warning"
 
     def on_click(self, event):
         self.set_value(event.item)
 
-    def get_housekeeping(self):
+    def get_value(self):
         return self.value
 
 
@@ -498,9 +517,12 @@ class CSVImportWidget(Widget):
 
 
         self.hk_selector_container = Row()
-        self.hk_selector = HKSelector(self.hk_selector_container, app, data)
+        self.hk_selector = HKSelector(self.hk_selector_container, app, data, "genes", "Housekeeping Gene")
         self.link(self.hk_selector, "genes")
-        print(self._links)
+
+        self.norm_selector_container = Row()
+        self.norm_selector = HKSelector(self.hk_selector_container, app, data, "samples", "Normalizing Sample")
+        self.link(self.norm_selector, "samples")
 
         self._root_widget = Column(self._button_bar, self._title, self.hk_selector_container)
         self.well_excluder = WellExcluder(self._root_widget)
@@ -513,12 +535,15 @@ class CSVImportWidget(Widget):
         print(path)
         if path is not None and path != b"":
             meta = self._importer.read_meta(path.decode("utf-8"))
-            self.app.update_data({"genes": self._importer.genes})
+            self.update({"genes": self._importer.genes, "samples": self._importer.samples})
 
     async def import_(self):
-        housekeeping = self.hk_selector.get_housekeeping()
+
+        housekeeping = self.hk_selector.get_value()
+        normalize = self.norm_selector.get_value()
+
         excluded_wells = self.well_excluder.get_excluded_wells()
         path = await self.app._load_file_dialog()
         self._importer.path_data = path.decode("utf8")
-        data = self._importer.import_(excluded_wells, housekeeping)
+        data = self._importer.import_(excluded_wells, housekeeping, normalize)
         self.app.load_data(data)

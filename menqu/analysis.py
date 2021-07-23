@@ -11,9 +11,10 @@ from os.path import join as pjoin
 from menqu.updater import needs_update, update
 import menqu
 from collections import defaultdict
+import numpy as np
 
 
-Measurement = namedtuple("Measurement", ["data", "gene_name", "gene_type", "identifier"])
+Measurement = namedtuple("Measurement", ["data", "gene_name", "gene_type", "identifier", "sample_type"])
 alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 @click.command()
@@ -41,10 +42,12 @@ def _main_csv(data):
     data = sorted(data, key=lambda m: (str(m.gene_type) if m.gene_type else '', str(m.gene_name) if m.gene_name else '', str(m.identifier).zfill(4) if m.identifier else ''))
 
     data = [m for m in data if any(m.data)]
+    print(data)
     housekeeping = calculate_housekeeping_normalisation(data)
     print(housekeeping)
     data = normalize_housekeeping(data, housekeeping)
     pluripotent = calculate_pluripotent_normalisation(data)
+    print(pluripotent)
     data = normalize_pluripotent(data, pluripotent)
     return data
 
@@ -219,6 +222,7 @@ def read_data(databook, color_mapping, identifier_mapping, excluded_wells):
     well_to_gene = {}
     data_per_gene = {}
     data_matrix = []
+    identifier_to_sample_type = {"pluri": "normalize"}
 
     for row, number in enumerate(range(4, 65, 4)):
      datatransfer = databook.sheets['SYBR'].range(f'C{number}:Z{number}')
@@ -250,7 +254,7 @@ def read_data(databook, color_mapping, identifier_mapping, excluded_wells):
          for identifier, measurements in measurements_per_gene.items():
              if gene_name is None and gene_type is None:
                  continue
-             data_matrix.append(Measurement(measurements, gene_name,  gene_type , identifier))
+             data_matrix.append(Measurement(measurements, gene_name,  gene_type , identifier, identifier_to_sample_type.get(identifier, None)))
     #data_matrix.append(Measurement(filled_data[0], filled_data[1], filled_data[2], gene_name, gene_type, identifier))
     filled_data = []
 
@@ -273,7 +277,7 @@ def metadata_from_pandas(df):
 
     return well_to_identifier, well_to_gene
 
-def data_matrix_from_pandas(df, well_to_gene, well_to_identifier, gene_to_gene_type, excluded_wells):
+def data_matrix_from_pandas(df, well_to_gene, well_to_identifier, gene_to_gene_type, excluded_wells, identifier_to_type):
     data_matrix = []
     measurements = defaultdict(list)
     for _, row in df.iterrows():
@@ -281,6 +285,8 @@ def data_matrix_from_pandas(df, well_to_gene, well_to_identifier, gene_to_gene_t
         if well in excluded_wells:
             continue
         m = row["Cq"]
+        if np.isnan(m):
+            continue
         identifier = well_to_identifier.get(well, None)
         gene = well_to_gene.get(well, None)
         gene_type = gene_to_gene_type.get(gene, None)
@@ -290,7 +296,7 @@ def data_matrix_from_pandas(df, well_to_gene, well_to_identifier, gene_to_gene_t
         ms = [x[0] for x in measurements[identifier]]
         _, gene_name, gene_type, identifier = measurements[identifier][0]
 
-        data_matrix.append(Measurement(ms, gene_name, gene_type, identifier))
+        data_matrix.append(Measurement(ms, gene_name, gene_type, identifier, identifier_to_type.get(identifier, None)))
 
     return data_matrix
 
@@ -340,13 +346,13 @@ def normalize_housekeeping(data, housekeeping):
     r = []
     for m in data:
         if m.identifier:
-            r.append(Measurement([x - housekeeping[m.identifier] if x is not None else None for x in m.data ], m.gene_name, m.gene_type, m.identifier))
+            r.append(Measurement([x - housekeeping[m.identifier] if x is not None else None for x in m.data ], m.gene_name, m.gene_type, m.identifier, m.sample_type))
     return r
 
 def calculate_pluripotent_normalisation(data):
     norms = {}
     for m in data:
-        if m.identifier == 'pluri':
+        if m.sample_type == 'normalize':
             print(f'Processing {m.gene_name} pluri')
             try:
                 norms[m.gene_name] = mean(m.data)
@@ -357,10 +363,9 @@ def calculate_pluripotent_normalisation(data):
 
 def normalize_pluripotent(data, pluripotent):
     r = []
-    print(pluripotent)
     for m in data:
         if m.identifier:
-            r.append(Measurement([x - pluripotent[m.gene_name] if x is not None else None for x in m.data ], m.gene_name, m.gene_type, m.identifier))
+            r.append(Measurement([x - pluripotent[m.gene_name] if x is not None else None for x in m.data ], m.gene_name, m.gene_type, m.identifier, m.sample_type))
     return r
 
 def get_sort_key(row):

@@ -172,5 +172,10 @@ def general_mapper(column, mapped_to, to_map):
 
 def mutate_bokeh(f):
     def wrapped(self, *args, **kwargs):
-        self._doc.add_next_tick_callback(lambda: f(self, *args, **kwargs))
+        if mutate_bokeh.doc is not None:
+            mutate_bokeh.doc.add_next_tick_callback(lambda: f(self, *args, **kwargs))
+        else:
+            return f(self, *args, **kwargs)
     return wrapped
+
+mutate_bokeh.doc = None

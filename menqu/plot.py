@@ -170,34 +170,7 @@ class App:
         colors = self._load_colors()
         colors.update(self.data["colors"])
 
-        self.colorpickers._conditions = conditions
-        self.colorpickers.colors = colors
-        self.colorpickers._redraw_conditions()
-        self.heatmap._color_pickers = self.colorpickers.color_pickers
-
-        self.heatmap._gene_data = gene_data
-        self.heatmap._condition_data = condition_data
-        self.heatmap._genes = genes
-        self.heatmap._conditions = conditions
-        self.heatmap._samples = samples
-
-        self.heatmap.redraw()
-
-        self.bargraphs._gene_data = gene_data
-        self.bargraphs._condition_data = condition_data
-        self.bargraphs._genes = genes
-        self.bargraphs._conditions = conditions
-        self.bargraphs._samples = samples
-
-        self.bargraphs.redraw()
-
-        self.table._gene_data = gene_data
-        self.table._condition_data = condition_data
-        self.table._genes = genes
-        self.table._conditions = conditions
-        self.table._samples = samples
-
-        self.table.redraw()
+        self.root_widget.update(self.data)
 
     def save_to_menqu(self, filename):
         self._get_color_data()
@@ -234,6 +207,7 @@ class App:
     def transform(self, doc):
         doc.add_root(self.root)
         self._doc = doc
+        mutate_bokeh.doc = doc
 
     def load_fake_data_1(self):
         data = get_fake_data()
