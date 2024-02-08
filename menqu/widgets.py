@@ -1,178 +1,25 @@
-"""
-Bokeh is used to visualize data. It's building blocks are models, which are
-syncronized with the client browser. As far as I found there is no support for
-building more complex widgets from building blocks. This module contains classes
-which generate bokeh models from data when calling `_draw()`. It populates a `_root_widget` 
-container, which is added as a child to a passed container. When data changes `redraw()` 
-has to be called, which mutates the `_root_widget`.
-"""
-
 from bokeh.plotting import figure
 from bokeh.palettes import Viridis256
 from bokeh.core.properties import value
 from bokeh.transform import linear_cmap
-from bokeh.models import Column, FactorRange, ColumnDataSource, BooleanFilter, CDSView, Row, ColorPicker, DataTable, TableColumn, TextInput, Div, Button, Tabs, Panel, Dropdown
+from bokeh.models import Column, FactorRange, ColumnDataSource, BooleanFilter, CDSView, Row, ColorPicker, DataTable, TableColumn
 from bokeh.models.widgets.tables import HTMLTemplateFormatter
 from bokeh.models.callbacks import CustomJS
 
-import menqu
-from menqu.helpers import apply_theme, general_mapper, mutate_bokeh
+from menqu.helpers import apply_theme, general_mapper
 from menqu.themes import CONDITIONS_THEME
-from menqu.analysis import parse_well
-from menqu.data_importers import ExcelImporter, CSVImporter
-import asyncio
 
 import numpy as np
-from collections import defaultdict
 
 MIN_BORDER_LEFT = 100
 
-class Widget:
-
-    def __init__(self, data):
-        self._data = data
-        self._links = defaultdict(list)
-
-    @mutate_bokeh
-    def update(self, d):
-        # update this widget
-        for dataname, datavalue in d.items():
-            self._data[dataname] = datavalue
-
-        # update the child widget with all data it needs in one go
-        for child_widget, data_names in self._links.items():
-            child_widget.update({data_name: d[data_name] for data_name in data_names if data_name in d})
-
-    def link(self, widget, dataname):
-        self._links[widget].append(dataname)
-
-class RootWidget(Widget):
-
-    def __init__(self, app, data):
-        super().__init__(data)
-        self.app = app
-        #self._data = {"gene_data": gene_data, "condition_data": condition_data, "samples": samples, "conditions": conditions, "colors":colors}
-
-        self.tools_container = Row()
-        self.plot_container = Column()
-        self.wells_container = Column()
-        self.bargraphs_container = Column()
-        self.table_container = Column()
-        self.importer_container = Column()
-        self.importer_csv_container = Column()
-
-        self._tabs = Tabs(tabs=[
-                    Panel(child=self.plot_container, title="Heatmap"),
-                    Panel(child=self.bargraphs_container, title="Bargraphs"),
-                    Panel(child=self.table_container, title="Table")
-                    ])
-        self._main_column = Column(
-                Div(text="", height=100), 
-                Row(Div(text="", width=100), self.tools_container),
-                Div(text="", height=100), 
-                Row(Div(text="", width=100), 
-                    self._tabs
-                    )
-                )
-
-        self.root = Column()
-        self._button_bar = ButtonBar(self.root, app, self)
-        self.root.children.append(self._main_column)
-
-        self.colorpickers = ColorPickers(self.tools_container, {"conditions": data["conditions"], "colors": data["colors"]}, app=self)
-        self.link(self.colorpickers, "conditions")
-        self.link(self.colorpickers, "colors")
-
-        self.heatmap = HeatmapGraphs(self.plot_container, data, color_pickers=self.colorpickers.color_pickers)
-
-        self.bargraphs = BarGraphs(self.bargraphs_container, data, color_pickers=self.colorpickers.color_pickers)
-
-        self.table = Table(self.table_container, data, color_pickers=self.colorpickers.color_pickers)
-
-        self.excel_importer = ExcelImportWidget(self.importer_container, app, self)
-
-        self.csv_importer = CSVImportWidget(self.importer_csv_container, app, self, {"genes": data["genes"], "samples": data["samples"]})
-
-        for widget in [self.heatmap, self.bargraphs, self.table]:
-            for data_name in data:
-                self.link(widget, data_name)
-
-        self.link(self.csv_importer, "genes")
-        self.link(self.csv_importer, "samples")
-
-    def update(self, d):
-        super().update(d)
-        print(d)
-
-    def show_excel_importer(self):
-        self.root.children.remove(self._main_column)
-        self.root.children.append(self.importer_container)
-
-    def show_csv_importer(self):
-        if self._main_column in self.root.children:
-            self.root.children.remove(self._main_column)
-        self.root.children.append(self.importer_csv_container)
-
-    def show_main(self):
-        if self.importer_container in self.root.children:
-            self.root.children.remove(self.importer_container)
-        if self.importer_csv_container in self.root.children:
-            self.root.children.remove(self.importer_csv_container)
-        self.root.children.append(self._main_column)
-
-class ButtonBar(Widget):
-
-    def __init__(self, root, app, root_widget):
-        super().__init__({})
-        self.app = app
-
-        _buttons = []
-        BUTTON_WIDTH = 100
-
-        button_save = Button(label="Save", width=BUTTON_WIDTH)
-        button_save.on_click(lambda: asyncio.ensure_future(self.app.save_file_dialog()))
-        _buttons.append(button_save)
-
-        button_load = Button(label="Load", width=BUTTON_WIDTH)
-        button_load.on_click(lambda: asyncio.ensure_future(self.app.load_file_dialog()))
-        _buttons.append(button_load)
-
-        button_export = Button(label="Export", width=BUTTON_WIDTH)
-        button_export.on_click(lambda: asyncio.ensure_future(self.app.export_file_dialog()))
-        _buttons.append(button_export)
-
-        button_exit = Button(label="Exit", width=BUTTON_WIDTH, name="ExitButton")
-        button_exit.on_click(lambda: asyncio.ensure_future(self.app.exit()))
-        _buttons.append(button_exit)
-
-        button_import = Button(label="Import from Excel", width=200)
-        button_import.on_click(root_widget.show_excel_importer)
-        _buttons.append(button_import)
-
-        button_import = Button(label="Import from CSV", width=200)
-        button_import.on_click(root_widget.show_csv_importer)
-        _buttons.append(button_import)
-
-        button_ordering = Button(label="Reimport Graph Ordering", width=200)
-        button_ordering.on_click(lambda: asyncio.ensure_future(self.app._import_graph_ordering()))
-        _buttons.append(button_ordering)
-
-        button_update = Button(label="Update", width=200)
-        button_ordering.on_click(lambda: asyncio.ensure_future(self.app.update()))
-        update_needed, self._update_url = self.app.update_needed()
-        if update_needed:
-            _buttons.append(button_update)
-
-        self._root_widget = Row(children=_buttons)
-        root.children.append(self._root_widget)
-
-class WithConditions(Widget):
+class WithConditions:
 
     def draw_conditions(self, xaxis, condition_data):
-        p = figure(x_range=xaxis, frame_height=25*len(self._data["conditions"]), frame_width=self._width*len(self._data["samples"]), toolbar_location=None, y_range=self._data["conditions"])
+        p = figure(x_range=xaxis, frame_height=25*len(self._conditions), frame_width=self._width*len(self._samples), toolbar_location=None, y_range=self._conditions)
         apply_theme(p, CONDITIONS_THEME)
 
-        for condition in self._data["conditions"]:
+        for condition in self._conditions:
             default_color = "black"
             if condition in self._color_pickers:
                 cp = self._color_pickers[condition]
@@ -195,40 +42,46 @@ class WithConditions(Widget):
 
 class BarGraphs(WithConditions):
 
-    def __init__(self, root, data, color_pickers={}):
-        super().__init__(data)
+    def __init__(self, root, gene_data, condition_data, samples, genes, conditions, color_pickers={}):
+        self._gene_data = gene_data
+        self._condition_data = condition_data
+        self._genes = genes
+        self._conditions = conditions
+        self._samples = samples
 
         self._color_pickers = color_pickers
 
-        self._maxvalue = max(max(self._data["gene_data"]["R1"]), max(self._data["gene_data"]["R2"]), max(self._data["gene_data"]["R3"]))
+
+        self._maxvalue = max(max(gene_data["R1"]), max(gene_data["R2"]), max(gene_data["R3"]))
         self._width = 25
         self._height = 25
         self._linear_color_mapper = None
 
         self._condition_height = 25
 
-        self._root_widget = Column()
+        self._root = Column()
         self._draw()
 
-        root.children.append(self._root_widget)
+        root.children.append(self._root)
 
     def redraw(self):
-        self._root_widget.children = []
+        self._root.children = []
         self._draw()
 
     def _draw(self):
-        self._xrange = FactorRange(factors=self._data["samples"])
-        for gene in self._data["genes"]:
-            p = figure(frame_width=self._width*len(self._data["samples"]), frame_height = self._height*2, x_range=self._xrange, title=gene)
+        self._xrange = FactorRange(factors=self._samples)
+        for gene in self._genes:
+            p = figure(frame_width=self._width*len(self._samples), frame_height = self._height*2, x_range=self._xrange, title=gene)
             p.xaxis.visible = False
-            mask = np.array(self._data["gene_data"]["Gene"]) == gene
-            x_values = np.array(self._data["gene_data"]["Sample"])[mask]
-            rs =  [np.array(self._data["gene_data"][replicate], dtype=np.float)[mask] for replicate in [f"R{i}" for i in range(1, len(self._data["gene_data"])-2)]]
-            p.vbar(x=x_values, top=np.array(self._data["gene_data"]["mean"])[mask], bottom=0, fill_color="black", line_color="black", fill_alpha=0.5, width=0.8)
-            for r in rs:
-                p.circle(x=x_values, y=r, color="black")
+            mask = np.array(self._gene_data["Gene"]) == gene
+            x_values = np.array(self._gene_data["Sample"])[mask]
+            r1, r2, r3 =  [np.array(self._gene_data[replicate], dtype=np.float64)[mask] for replicate in ["R1", "R2", "R3"]]
+            p.vbar(x=x_values, top=np.array(self._gene_data["mean"])[mask], bottom=0, fill_color="black", line_color="black", fill_alpha=0.5, width=0.8)
+            p.circle(x=x_values, y=r1, color="black")
+            p.circle(x=x_values, y=r2, color="black")
+            p.circle(x=x_values, y=r3, color="black")
 
-            stacked_data = np.stack(rs)
+            stacked_data = np.stack((r1, r2, r3))
             mean = np.nanmean(stacked_data, axis=0)
             std = np.nanstd(stacked_data, axis=0)
 
@@ -237,19 +90,19 @@ class BarGraphs(WithConditions):
 
             p.min_border_left = MIN_BORDER_LEFT
 
-            self._root_widget.children.append(p)
+            self._root.children.append(p)
 
-        p = self.draw_conditions(self._xrange, self._data["condition_data"])
-        self._root_widget.children.append(p)
-
-    def update(self, d):
-        super().update(d)
-        self.redraw()
+        p = self.draw_conditions(self._xrange, self._condition_data)
+        self._root.children.append(p)
 
 class HeatmapGraphs(WithConditions):
 
-    def __init__(self, root, data, color_pickers={}):
-        super().__init__(data)
+    def __init__(self, root, gene_data, condition_data, samples, genes, conditions, color_pickers={}):
+        self._gene_data = gene_data
+        self._condition_data = condition_data
+        self._genes = genes
+        self._conditions = conditions
+        self._samples = samples
 
         self._color_pickers = color_pickers
 
@@ -259,21 +112,21 @@ class HeatmapGraphs(WithConditions):
 
         self._condition_height = 25
 
-        self._root_widget = Column()
+        self._root = Column()
         self._draw_everything()
 
-        root.children.append(self._root_widget)
+        root.children.append(self._root)
 
 
     def redraw(self):
-        self._root_widget.children = []
+        self._root.children = []
         self._draw_everything()
 
     def _calculate_maxvalues(self):
         maxvalues = {}
-        for gene in self._data["genes"]:
-            mask = np.array(self._data["gene_data"]["Gene"]) == gene
-            data = np.array(self._data["gene_data"]["mean"])[mask]
+        for gene in self._genes:
+            mask = np.array(self._gene_data["Gene"]) == gene
+            data = np.array(self._gene_data["mean"])[mask]
             if len(data) > 0:
                 m = np.max(data)
             else:
@@ -285,13 +138,13 @@ class HeatmapGraphs(WithConditions):
 
         self._maxvalues = self._calculate_maxvalues()
 
-        self._xrange = FactorRange(factors=self._data["samples"])
+        self._xrange = FactorRange(factors=self._samples)
 
-        p_heatmap = self.draw_heatmap(self._xrange, self._data["gene_data"], self._data["genes"])
-        p_cond = self.draw_conditions(self._xrange, self._data["condition_data"])
+        p_heatmap = self.draw_heatmap(self._xrange, self._gene_data, self._genes)
+        p_cond = self.draw_conditions(self._xrange, self._condition_data)
 
-        self._root_widget.children.append(p_heatmap)
-        self._root_widget.children.append(p_cond)
+        self._root.children.append(p_heatmap)
+        self._root.children.append(p_cond)
 
     def draw_heatmap(self, xaxis, source, genes):
         cds = ColumnDataSource(source)
@@ -303,8 +156,8 @@ class HeatmapGraphs(WithConditions):
                 ]
         p = figure(x_range=xaxis,
                 y_range=FactorRange(factors=genes),
-                frame_width=self._width*len(self._data["samples"]),
-                frame_height=self._height*len(self._data["genes"]),
+                frame_width=self._width*len(self._samples),
+                frame_height=self._height*len(self._genes),
                 tooltips=TOOLTIPS)
 
         self._heatmap_plot = p
@@ -319,15 +172,12 @@ class HeatmapGraphs(WithConditions):
 
         return p
 
-    def update(self, d):
-        super().update(d)
-        self.redraw()
+class ColorPickers:
 
-class ColorPickers(Widget):
-
-    def __init__(self, root, data, columns=8, app=None):
-        super().__init__(data)
+    def __init__(self, root, columns=8, conditions=tuple(), colors={}, app=None):
         self.app = app
+        self._conditions = conditions.copy()
+        self.colors = colors
         self._root_widget = Column()
         self._columns = columns
         self.color_pickers = {}
@@ -336,15 +186,15 @@ class ColorPickers(Widget):
         self._redraw_conditions()
 
     def _update_color(self, condition, attr, old, new):
-        self._data["colors"][condition] = new
+        self.colors[condition] = new
         self.app.save_colors()
 
     def _redraw_conditions(self):
         self._root_widget.children = []
         current_row = Row()
         cond_idx = 0
-        for cond in self._data["conditions"]:
-            cp = ColorPicker(color=self._data["colors"].get(cond, "blue"), title=cond, width=60)
+        for cond in self._conditions:
+            cp = ColorPicker(color=self.colors.get(cond, "blue"), title=cond, width=60)
             cp.on_change("color", lambda attr, old, new: self._update_color(cond, attr, old, new))
             self.color_pickers[cond] = cp
             if cond_idx == self._columns:
@@ -353,37 +203,39 @@ class ColorPickers(Widget):
             current_row.children.append(cp)
         self._root_widget.children.append(current_row)
 
-class Table(Widget):
 
-    def __init__(self, root, data, color_pickers={}):
-        super().__init__(data)
+class Table:
+
+    def __init__(self, root, gene_data, condition_data, samples, genes, conditions, color_pickers={}):
+        self._gene_data = gene_data
+        self._condition_data = condition_data
+        self._genes = genes
+        self._conditions = conditions
+        self._samples = samples
+
         self._color_pickers = color_pickers
 
-        self._maxvalue = max(max(self._data["gene_data"]["R1"]), max(self._data["gene_data"]["R2"]), max(self._data["gene_data"]["R3"]))
+        self._maxvalue = max(max(gene_data["R1"]), max(gene_data["R2"]), max(gene_data["R3"]))
         self._width = 25
         self._height = 25
         self._linear_color_mapper = None
 
         self._condition_height = 25
 
-        self._root_widget = Column()
+        self._root = Column()
         self._draw()
 
-        root.children.append(self._root_widget)
+        root.children.append(self._root)
 
     def redraw(self):
-        self._root_widget.children = []
+        self._root.children = []
         self._draw()
 
-    def update(self, d):
-        super().update(d)
-        self.redraw()
-
     def _draw(self):
-        d = self._data["gene_data"]
+        d = self._gene_data
 
-        for condition in self._data["conditions"]:
-            d[condition] = [self._data["condition_data"][condition][self._data["condition_data"]["Sample"].index(sample)] for sample in d["Sample"] if sample in self._data["condition_data"]["Sample"]]
+        for condition in self._conditions:
+            d[condition] = [self._condition_data[condition][self._condition_data["Sample"].index(sample)] for sample in d["Sample"] if sample in self._condition_data["Sample"]]
 
         template_update_1 = '<% if (value === "True") {print(\'<div style="height: 20px; width: 20px; background-color:'
         template_update_2 = ';"></div>\')} %>'
@@ -393,11 +245,11 @@ class Table(Widget):
         template_update_1_esc = template_update_1.replace("'", "\\'")
         template_update_2_esc = template_update_2.replace("'", "\\'")
 
-        formatters = [HTMLTemplateFormatter(template=make_template(color=self._color_pickers[cond].color)) for cond in self._data["conditions"]]
+        formatters = [HTMLTemplateFormatter(template=make_template(color=self._color_pickers[cond].color)) for cond in self._conditions]
 
 
 
-        condition_columns = [TableColumn(field=cond, title=cond, formatter=form, width=10) for cond, form in zip(self._data["conditions"], formatters)]
+        condition_columns = [TableColumn(field=cond, title=cond, formatter=form, width=10) for cond, form in zip(self._conditions, formatters)]
         columns = [
                 TableColumn(field="Sample", title="Sample", width=200),
                 TableColumn(field="Gene", title="Gene", width=10),
@@ -414,136 +266,7 @@ class Table(Widget):
         for cp, formatter, col in zip(self._color_pickers.values(), formatters, condition_columns):
             cp.js_on_change("color", CustomJS(args={"cp": cp, "col":col, "form": formatter, "dt": dt}, code=code))
 
-        self._root_widget.children.append(dt)
+        self._root.children.append(dt)
 
         dt.source.patch({})
 
-class WellExcluder:
-
-    def __init__(self, root):
-        self._tp = TextInput()
-        self._root_widget = Column(Div(text="Wells to Exclude"), self._tp)
-
-        root.children.append(self._root_widget)
-
-    def get_excluded_wells(self):
-        return [parse_well(well.strip()) if well.strip() else None for well in self._tp.value.split(",")]
-
-class ExcelImportWidget(Widget):
-
-    def __init__(self, root, app, root_widget):
-        super().__init__({})
-        self.app = app
-
-        BUTTON_WIDTH = 100
-        self._title = Div(text="Excel Importer")
-        self._button_back = Button(label="Back", width=BUTTON_WIDTH)
-        self._button_back.on_click(root_widget.show_main)
-
-        self._button = Button(label="Import", width=BUTTON_WIDTH)
-        self._button.on_click(lambda: asyncio.ensure_future(self.import_))
-
-        self._button_bar = Row(self._button_back, self._button)
-
-        self._root_widget = Column(self._button_bar, self._title)
-
-        self.well_excluder = WellExcluder(self._root_widget)
-        root.children.append(self._root_widget)
-
-        self._importer = ExcelImporter()
-
-    async def import_(self):
-        excluded_wells = self.well_excluder.get_excluded_wells()
-        self._importer.prepare()
-        data = self._importer.import_(excluded_wells)
-        self.app.load_data(data)
-
-class HKSelector(Widget):
-
-    def __init__(self, root, app, data, data_name, label):
-        super().__init__(data)
-        self._data_name = data_name
-        self._label = label
-        self.app = app
-        self.root_widget = Dropdown(label=label, menu=[("X", "X")])
-        self.value = None
-        root.children.append(self.root_widget)
-
-        self.root_widget.on_click(self.on_click)
-
-        self.update(data)
-
-    def update(self, d):
-        super().update(d)
-        self.root_widget.menu = [(x, x) for x in self._data[self._data_name]]
-        if self.value not in self._data[self._data_name]:
-            self.set_value(None)
-
-    def set_value(self, value):
-        self.value = value
-        if value:
-            self.root_widget.label = value
-            self.root_widget.button_type = "success"
-        else:
-            self.root_widget.label = self._label
-            self.root_widget.button_type = "warning"
-
-    def on_click(self, event):
-        self.set_value(event.item)
-
-    def get_value(self):
-        return self.value
-
-
-class CSVImportWidget(Widget):
-
-    def __init__(self, root, app, root_widget, data):
-        super().__init__(data)
-        self.app = app
-
-        BUTTON_WIDTH = 100
-        self._title = Div(text="CSV Importer")
-        self._button_back = Button(label="Back", width=BUTTON_WIDTH)
-        self._button_back.on_click(root_widget.show_main)
-
-        self._button = Button(label="Import", width=BUTTON_WIDTH)
-        self._button.on_click(lambda: asyncio.ensure_future(self.import_()))
-
-        self._button_genes = Button(label="Import Genes", width=BUTTON_WIDTH)
-        self._button_genes.on_click(lambda: asyncio.ensure_future(self.import_genes()))
-
-        self._button_bar = Row(self._button_back, self._button_genes, self._button)
-
-
-
-        self.hk_selector_container = Row()
-        self.hk_selector = HKSelector(self.hk_selector_container, app, data, "genes", "Housekeeping Gene")
-        self.link(self.hk_selector, "genes")
-
-        self.norm_selector_container = Row()
-        self.norm_selector = HKSelector(self.hk_selector_container, app, data, "samples", "Normalizing Sample")
-        self.link(self.norm_selector, "samples")
-
-        self._root_widget = Column(self._button_bar, self._title, self.hk_selector_container)
-        self.well_excluder = WellExcluder(self._root_widget)
-        root.children.append(self._root_widget)
-
-        self._importer = CSVImporter()
-
-    async def import_genes(self):
-        path = await self.app._load_file_dialog()
-        print(path)
-        if path is not None and path != b"":
-            meta = self._importer.read_meta(path.decode("utf-8"))
-            self.update({"genes": self._importer.genes, "samples": self._importer.samples})
-
-    async def import_(self):
-
-        housekeeping = self.hk_selector.get_value()
-        normalize = self.norm_selector.get_value()
-
-        excluded_wells = self.well_excluder.get_excluded_wells()
-        path = await self.app._load_file_dialog()
-        self._importer.path_data = path.decode("utf8")
-        data = self._importer.import_(excluded_wells, housekeeping, normalize)
-        self.app.load_data(data)

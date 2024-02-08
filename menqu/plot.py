@@ -3,10 +3,11 @@ import time
 from bokeh.transform import linear_cmap, factor_cmap, transform
 from bokeh.palettes import Viridis256
 from bokeh.core.properties import value
-from bokeh.models import Plot, Tabs, Panel, ColorPicker
-from bokeh.plotting.figure import Figure
+from bokeh.models import Plot, Tabs, TabPanel, ColorPicker
+from bokeh.plotting import figure
 from bokeh.io.export import export_svg
 import json
+import webview
 import threading
 import asyncio
 import pathlib
@@ -18,9 +19,9 @@ from menqu.helpers import apply_theme
 from menqu.themes import CONDITIONS_THEME
 
 from menqu.analysis import prepare, _main, parse_well, get_sample_data, _update
-from menqu.widgets import BarGraphs, HeatmapGraphs, ColorPickers, Table, WellExcluder, ButtonBar
+from menqu.widgets import BarGraphs, HeatmapGraphs, ColorPickers, Table
 from menqu.updater import update, needs_update
-from menqu.datasources import get_fake_data, get_fake_data2, load_from_menqu_file, save_to_menqu_file
+import click
 import sys
 import os.path
 import appdirs
@@ -31,8 +32,7 @@ EXCEL_AREA = 'A1:M1000'
 CACHE_DIR = appdirs.user_cache_dir("menqu")
 CACHE_FILE = os.path.join(CACHE_DIR, "cache")
 
-from menqu.helpers import get_app, get_analysisbook, map_show, plot_data, export_as_svg, show, mutate_bokeh
-from menqu.widgets import RootWidget
+from menqu.helpers import get_app, get_analysisbook, map_show, plot_data, export_as_svg, show
 import numpy as np
 import pickle
 import pandas
@@ -41,8 +41,91 @@ from functools import wraps
 
 from bokeh.models import Row, Column,  TextInput, Div, Button, ColorPicker, CheckboxGroup, Grid, ColumnDataSource, CustomJSTransform
 from bokeh.layouts import layout, grid
+from bokeh.server.server import Server
 from bokeh.plotting import figure
 from bokeh.models import ColumnDataSource, Whisker, FactorRange, CDSView, BooleanFilter
+
+def mutate_bokeh(f):
+    def wrapped(self, *args, **kwargs):
+        self._doc.add_next_tick_callback(lambda: f(self, *args, **kwargs))
+    return wrapped
+
+
+
+
+
+def get_fake_data():
+    gene_data = {"R1": np.array([1, 2, 4, 4]),
+            "R2": np.array([2, 1, 4, 4]),
+            "R3":np.array([1, 2, 4, 4]),
+            "Sample": ["1", "1", "2", "2"], "Gene":["HOXB", "SHO", "HOXB", "SHO"]}
+
+    gene_data["mean"] = (gene_data["R1"] + gene_data["R2"] + gene_data["R3"]) / 3
+
+    condition_data = {"Sample": ["1", "2"],
+            "groß": ["True", "False"],
+            "schnell": ["False", "True"],
+            "rot": ["True", "True"]
+            }
+
+    conditions = ["groß", "schnell", "rot"]
+    genes = ["HOXB", "SHO"]
+    samples = ["1", "2"]
+
+    colors = {"groß": "red", "schnell": "blue", "rot":"green"}
+
+    gene_data["R1"] = gene_data["R1"].tolist()
+    gene_data["R2"] = gene_data["R2"].tolist()
+    gene_data["R3"] = gene_data["R3"].tolist()
+
+    name = "TestData1"
+
+    return {"gene_data": gene_data, "condition_data": condition_data, "conditions": conditions, "genes": genes, "samples":samples, "colors":colors, "name":name}
+
+def get_fake_data2():
+    gene_data = {"R1": np.array([1, 2, 4, 4, 5, 2]),
+            "R2": np.array([2, 1, 4, 4, 5, 2]),
+            "R3":np.array([1, 2, 4, 4, 5, 2]),
+            "Sample": ["1", "1", "2", "2", "pluri", "pluri"], "Gene":["A", "B", "A", "B", "A", "B"]}
+
+    gene_data["mean"] = (gene_data["R1"] + gene_data["R2"] + gene_data["R3"]) / 3
+
+    condition_data = {"Sample": ["1", "2", "pluri"],
+            "beating": ["True", "False", "True"],
+            "3D": ["False", "True", "False"],
+            }
+
+    conditions = ["beating", "3D"]
+    genes = ["A", "B"]
+    samples = ["1", "2", "pluri"]
+
+    colors = {"beating": "#AAAA00", "3D": "blue"}
+
+    name = "TestData2"
+
+    return {"gene_data": gene_data, "condition_data": condition_data, "conditions": conditions, "genes": genes, "samples":samples, "colors":colors, "name":name}
+
+def load_from_menqu(data, filename):
+    with open(filename, mode="rb") as f:
+        data = pickle.load(f)
+    assert data["version"] == 1
+    return data["data"]
+
+class WellExcluder:
+
+    def __init__(self, root):
+        self._root = root
+        self._tp = TextInput()
+        self._root_widget = Column(Div(text="Wells to Exclude"), self._tp)
+
+        root.children.append(self._root_widget)
+
+    def get_excluded_wells(self):
+        return [parse_well(well.strip()) if well.strip() else None for well in self._tp.value.split(",")]
+
+
+
+
 
 
 class App:
@@ -61,11 +144,69 @@ class App:
 
         self.socket = None
 
-        data = {"gene_data": gene_data, "condition_data": condition_data, "samples": samples,
-                "genes": genes, "conditions": conditions, "colors": colors}
-        self.root_widget = RootWidget(self, data)
-        self.root = self.root_widget.root
+        _buttons = []
+        BUTTON_WIDTH = 100
 
+        button_save = Button(label="Save", width=BUTTON_WIDTH)
+        button_save.on_click(lambda: asyncio.ensure_future(self.save_file_dialog()))
+        _buttons.append(button_save)
+
+        button_load = Button(label="Load", width=BUTTON_WIDTH)
+        button_load.on_click(lambda: asyncio.ensure_future(self.load_file_dialog()))
+        _buttons.append(button_load)
+
+        button_export = Button(label="Export", width=BUTTON_WIDTH)
+        button_export.on_click(lambda: asyncio.ensure_future(self.export_file_dialog()))
+        _buttons.append(button_export)
+
+        button_exit = Button(label="Exit", width=BUTTON_WIDTH)
+        button_exit.on_click(lambda: asyncio.ensure_future(self.exit()))
+        _buttons.append(button_exit)
+
+        button_import = Button(label="Import from Excel", width=200)
+        button_import.on_click(lambda: asyncio.ensure_future(self._import()))
+        _buttons.append(button_import)
+
+        button_ordering = Button(label="Reimport Graph Ordering", width=200)
+        button_ordering.on_click(lambda: asyncio.ensure_future(self._import_graph_ordering()))
+        _buttons.append(button_ordering)
+
+        button_update = Button(label="Update", width=200)
+        button_ordering.on_click(lambda: asyncio.ensure_future(self.update()))
+        update_needed, self._update_url = needs_update(menqu.__version__)
+        if update_needed:
+            _buttons.append(button_update)
+
+        self.tools_container = Row()
+        self.plot_container = Column()
+        self.wells_container = Column()
+        self.bargraphs_container = Column()
+        self.table_container = Column()
+        self._tabs = Tabs(tabs=[
+                    TabPanel(child=self.plot_container, title="Heatmap"),
+                    TabPanel(child=self.bargraphs_container, title="Bargraphs"),
+                    TabPanel(child=self.table_container, title="Table")
+                    ])
+        self._main_column = Column(
+                Div(text="", height=100), 
+                Row(Div(text="", width=100), self.tools_container),
+                Div(text="", height=100), 
+                Row(Div(text="", width=100), 
+                    self._tabs
+                    )
+                )
+
+        self.root = Column(
+                Row(*_buttons), 
+                self._main_column)
+
+        self.colorpickers = ColorPickers(self.tools_container, conditions=conditions, colors=colors, app=self)
+        self.heatmap = HeatmapGraphs(self.plot_container, gene_data, condition_data, samples, genes, conditions, color_pickers=self.colorpickers.color_pickers)
+        self.well_excluder = WellExcluder(self.wells_container)
+
+        self.bargraphs = BarGraphs(self.bargraphs_container, gene_data, condition_data, samples, genes, conditions, color_pickers=self.colorpickers.color_pickers)
+
+        self.table = Table(self.table_container, gene_data, condition_data, samples, genes, conditions, color_pickers=self.colorpickers.color_pickers)
 
         self._socket_in_use = False
 
@@ -89,19 +230,15 @@ class App:
             if file != b"":
                 self.save_to_menqu(file)
 
-    async def _load_file_dialog(self):
+    async def load_file_dialog(self):
         if self.socket and not self._socket_in_use:
             self._socket_in_use = True
             await self.socket.send(b"LOAD")
             file = await self.socket.recv()
             self._socket_in_use = False
-            return file
-        return None
 
-    async def load_file_dialog(self):
-        file = await self._load_file_dialog()
-        if file is not None and file != b"":
-            self.load_from_menqu_file(file)
+            if file != b"":
+                self.load_from_menqu(file)
 
     async def export_file_dialog(self):
         if self.socket and not self._socket_in_use:
@@ -125,9 +262,6 @@ class App:
     async def update(self):
         if self._update_url != None:
             update(self._update_url)
-
-    def update_needed(self):
-        return needs_update(menqu.__version__)
 
     def save_colors(self):
         pathlib.Path(CACHE_DIR).mkdir(parents=True, exist_ok=True)
@@ -157,10 +291,6 @@ class App:
         self.load_data_to_plots()
 
     @mutate_bokeh
-    def update_data(self, data):
-        self.root_widget.update(data)
-
-    @mutate_bokeh
     def load_data_to_plots(self):
         gene_data = self.data["gene_data"]
         condition_data = self.data["condition_data"]
@@ -170,19 +300,48 @@ class App:
         colors = self._load_colors()
         colors.update(self.data["colors"])
 
-        self.root_widget.update(self.data)
+        self.colorpickers._conditions = conditions
+        self.colorpickers.colors = colors
+        self.colorpickers._redraw_conditions()
+        self.heatmap._color_pickers = self.colorpickers.color_pickers
+
+        self.heatmap._gene_data = gene_data
+        self.heatmap._condition_data = condition_data
+        self.heatmap._genes = genes
+        self.heatmap._conditions = conditions
+        self.heatmap._samples = samples
+
+        self.heatmap.redraw()
+
+        self.bargraphs._gene_data = gene_data
+        self.bargraphs._condition_data = condition_data
+        self.bargraphs._genes = genes
+        self.bargraphs._conditions = conditions
+        self.bargraphs._samples = samples
+
+        self.bargraphs.redraw()
+
+        self.table._gene_data = gene_data
+        self.table._condition_data = condition_data
+        self.table._genes = genes
+        self.table._conditions = conditions
+        self.table._samples = samples
+
+        self.table.redraw()
 
     def save_to_menqu(self, filename):
         self._get_color_data()
-        save_to_menqu_file(self.data, filename)
-
-    def load_from_menqu(self, name):
-        data = load_from_menqu_file(name)
-        self.load_data(data)
+        with open(filename, mode="wb") as f:
+            pickle.dump({"version":1, "data": self.data}, f)
 
     def _get_color_data(self):
         for name, cp in self.colorpickers.color_pickers.items():
             self.data["colors"][name] = cp.color
+
+    def load_from_menqu(self, name):
+        with open(name, mode='rb') as f:
+            data = pickle.load(f)
+        self.load_data(data["data"])
 
     @mutate_bokeh
     def export_as_svg(self, filename):
@@ -197,6 +356,63 @@ class App:
         if type(p) == Figure:
             p.output_backend = "svg"
 
+    async def _import(self):
+        if self._importer_step == 0:
+            self._import_step1()
+            self._importer_step = 1
+        elif self._importer_step == 1:
+            self._import_step2()
+            self._importer_step = 0
+
+    @mutate_bokeh
+    def _import_step1(self):
+        self.root.children.remove(self._main_column)
+        self.root.children.append(self.wells_container)
+
+        self._app, self._databook, self._analysisbook = prepare()
+
+    @mutate_bokeh
+    def _import_step2(self):
+        self.root.children.append(self._main_column)
+        self.root.children.remove(self.wells_container)
+
+        excluded_wells = self.well_excluder.get_excluded_wells()
+
+        data = _main(self._app, self._databook, self._analysisbook, excluded_wells)
+
+        means = []
+        samples = []
+        genes = []
+        max_repititions = max(len(x.data) for x in data)
+        repitions = [[] for x in range(max_repititions)]
+        for m in data:
+            mean = np.sum(2**-x for x in m.data if x is not None) / np.sum(1 for x in m.data if x is not None)
+            for i, x in enumerate(m.data):
+                repitions[i].append(2**-x if x is not None else None)
+
+            means.append(mean)
+            samples.append(str(m.identifier))
+            genes.append(m.gene_name)
+
+        gene_data = {"mean":means, "Sample":samples, "Gene": genes, **{"R"+str(i+1) : d for i, d in enumerate(repitions)}}
+
+        samples_found = set()
+        samples = []
+        for x in gene_data["Sample"]:
+            if x in samples_found:
+                continue
+            samples.append(x)
+            samples_found.add(x)
+
+        colors = {}
+        genes = list(set(gene_data["Gene"]))
+        name = ".".join(self._databook.fullname.split(".")[:-1])
+
+        condition_data, conditions = get_sample_data(self._analysisbook)
+
+        data =  {"gene_data": gene_data, "condition_data": condition_data, "conditions": conditions, "genes": genes, "samples":samples, "colors":colors, "name":name}
+        self.load_data(data)
+
     async def _import_graph_ordering(self):
         condition_data, conditions = get_sample_data(self._analysisbook)
         self.data["condition_data"] = condition_data
@@ -207,7 +423,6 @@ class App:
     def transform(self, doc):
         doc.add_root(self.root)
         self._doc = doc
-        mutate_bokeh.doc = doc
 
     def load_fake_data_1(self):
         data = get_fake_data()
@@ -217,3 +432,87 @@ class App:
         data = get_fake_data2()
         self.load_data(data)
 
+def start_py_web_view(port):
+    window = webview.create_window('menqu', 'http://localhost:5006/')
+
+    webview.start(func=start_zmq_window_server, args=(window, port), debug=True)
+
+def start_zmq_window_server(window, port):
+    context = zmq.Context()
+    socket = context.socket(zmq.REP)
+    socket.bind(f"tcp://127.0.0.1:{port}")
+
+    while True:
+        msg = socket.recv()
+        if msg[:4] == b"SAVE":
+            suggested_name = msg[4:].decode("utf-8")
+            filename = window.create_file_dialog(webview.SAVE_DIALOG, directory=os.getcwd(), save_filename=suggested_name + ".menqu")
+            if filename:
+                filename = "".join(filename)
+            else:
+                filename = ""
+            socket.send(filename.encode("utf-8"))
+        elif msg == b"LOAD":
+            filename = window.create_file_dialog(webview.OPEN_DIALOG, directory=os.getcwd(), save_filename='test.menqu')
+            if filename:
+                filename = "".join(filename)
+            else:
+                filename = ""
+            socket.send(filename.encode("utf-8"))
+        elif msg == b"EXPORT":
+            filename = window.create_file_dialog(webview.SAVE_DIALOG, directory=os.getcwd(), save_filename='test.svg')
+            if filename:
+                filename = "".join(filename)
+            else:
+                filename = ""
+            socket.send(filename.encode("utf-8"))
+        elif msg == b"EXIT":
+            socket.send(b"BYE")
+            window.destroy()
+            sys.exit(0)
+
+
+def start_server(port):
+    # Setting num_procs here means we can't touch the IOLoop before now, we must
+    # let Server handle that. If you need to explicitly handle IOLoops then you
+    # will need to use the lower level BaseServer class.
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    app = App()
+
+    context = zmq.asyncio.Context()
+    socket = context.socket(zmq.REQ)
+    socket.connect(f"tcp://127.0.0.1:{port}")
+
+    app.socket = socket
+
+    server = Server({'/': app.transform}, num_procs=1)
+    server.start()
+    #server.io_loop.add_callback(server.show, "/")
+    server.io_loop.start()
+
+def _main_pywebview():
+    PORT = 21934
+
+    webview = threading.Thread(target=start_server, args=(PORT,), daemon=True)
+    webview.start()
+
+    #webview.join()
+
+    time.sleep(0.3)
+
+    start_py_web_view(PORT)
+
+@click.command()
+@click.option("--update/--no-update", default=True)
+def main(update):
+    try:
+        if update:
+            _update()
+    except:
+        logging.exception()
+    _main_pywebview()
+
+if __name__ == "__main__":
+    main()
