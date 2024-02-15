@@ -37,6 +37,8 @@ def save_as_pickle(obj, name):
 
 def _main(app, databook, analysisbook, excluded_wells):
     color_mapping = read_gene_mapping(analysisbook)
+    gene_order = read_gene_order(analysisbook)
+
     identifier_mapping = read_setup(analysisbook, color_mapping) 
     data = read_data(databook, color_mapping, identifier_mapping, excluded_wells)
 
@@ -69,6 +71,10 @@ def _main(app, databook, analysisbook, excluded_wells):
     write_results(delta_data, deltadelta_data, analysisbook.sheets['Foldchange'])
 
     print('Finished working.')
+    def get_sorting_key(measurement):
+        return gene_order.index(measurement.gene_name)
+    data = sorted(data, key=get_sorting_key)
+
 
     return data
 
@@ -165,6 +171,20 @@ def read_setup(analysisbook, color_mapping):
             print(f'Unknown color in excel cell {cell.row}, {cell.column}: {make_color(color, color)} with value {value}')
 
     return identifier_mapping
+
+def read_gene_order(analysisbook):
+    gene_setup = analysisbook.sheets["Gene Order"]
+    gene_template = gene_setup.range("A1:A20")
+    gene_order = []
+
+    for cell in gene_template:
+        name = cell.value
+        if name is None:
+            break
+        gene_order.append(name)
+
+
+    return gene_order
 
 def read_gene_mapping(analysisbook):
     gene_setup = analysisbook.sheets["Set Up"]

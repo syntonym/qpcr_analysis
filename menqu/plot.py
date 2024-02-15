@@ -379,7 +379,8 @@ class App:
         excluded_wells = self.well_excluder.get_excluded_wells()
 
         data = _main(self._app, self._databook, self._analysisbook, excluded_wells)
-
+        for d in data:
+            print(d.gene_name)
         means = []
         samples = []
         genes = []
@@ -405,10 +406,15 @@ class App:
             samples_found.add(x)
 
         colors = {}
-        genes = list(set(gene_data["Gene"]))
         name = ".".join(self._databook.fullname.split(".")[:-1])
 
         condition_data, conditions = get_sample_data(self._analysisbook)
+
+        new_gene_list = []
+        for gene in genes:
+            if gene not in new_gene_list:
+                new_gene_list.append(gene)
+        genes = new_gene_list
 
         data =  {"gene_data": gene_data, "condition_data": condition_data, "conditions": conditions, "genes": genes, "samples":samples, "colors":colors, "name":name}
         self.load_data(data)

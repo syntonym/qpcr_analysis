@@ -155,7 +155,7 @@ class HeatmapGraphs(WithConditions):
                 ("Foldchange", "@mean"),
                 ]
         p = figure(x_range=xaxis,
-                y_range=FactorRange(factors=genes),
+                y_range=FactorRange(factors=genes[::-1]),
                 frame_width=self._width*len(self._samples),
                 frame_height=self._height*len(self._genes),
                 tooltips=TOOLTIPS)
